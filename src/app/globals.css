@@ -37,8 +37,9 @@
   --radius-sm: 6px;
   --gap: 1rem;
 
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+  --font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
   --font-numeric: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -441,4 +442,102 @@ td.label-cell {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* --- Forms ------------------------------------------------------------- */
+/*
+ * Override entry. Deliberately plain controls: this is the one screen that
+ * writes to the financial record, and a form that looks like a form is
+ * easier to be careful with than one disguised as decoration.
+ */
+
+.entry-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.field__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-faint);
+}
+
+.field__input,
+.field__select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  min-width: 6.5rem;
+}
+
+.field__input--wide {
+  min-width: 12rem;
+}
+
+.button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.32rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--surface-sunken);
+}
+
+.button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.button--primary:hover {
+  filter: brightness(1.08);
+}
+
+.button--quiet {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.field__input:focus-visible,
+.field__select:focus-visible,
+.button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The arithmetic the user confirms: source + adjustment = current. */
+.equation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  margin: 0.4rem 0 0.6rem;
+}
+
+.equation__operator {
+  color: var(--text-faint);
+}
+
+.equation__result {
+  font-weight: 700;
 }

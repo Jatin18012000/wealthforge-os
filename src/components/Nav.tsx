@@ -15,6 +15,7 @@ const LINKS = [
   { href: "/goals", label: "Goals" },
   { href: "/liabilities", label: "Liabilities" },
   { href: "/analytics", label: "Analytics" },
+  { href: "/settings", label: "Settings" },
 ] as const;
 
 export function Nav() {
