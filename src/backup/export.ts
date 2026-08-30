@@ -13,6 +13,7 @@ export async function exportFullBackup(
   db: PrismaClient,
   outDir: string,
   fileName = `wealthforge-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
+  trigger: "manual" | "automatic" = "manual",
 ): Promise<string> {
   const payload = await buildBackupPayload(db);
 
@@ -23,7 +24,7 @@ export async function exportFullBackup(
   await db.auditEvent.create({
     data: {
       kind: "backup",
-      payloadJson: JSON.stringify({ filePath, tableCounts: countRows(payload) }),
+      payloadJson: JSON.stringify({ filePath, trigger, tableCounts: countRows(payload) }),
     },
   });
 
