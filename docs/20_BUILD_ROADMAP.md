@@ -11,7 +11,7 @@ passing in an actual session (tests run, not assumed).
 | M2 | Local persistence | COMPLETE | `schema.prisma` (15 tables), initial migration applied, `src/lib/db.ts` client singleton, `prisma/seed.ts` dev fixtures, `src/backup/` export/restore skeleton + CLI | 8 tests: goal/activity derivation invariant, revision non-destructive update, idempotency check, backup/restore round-trip, conflict-blocks-restore, forced restore, audit-event recording — all passing | pnpm typecheck/lint/test/build all passed clean this session | Three real defects found and fixed same session (test suite caught two of them; manual verification caught the third): (1) audit_event timestamps were poisoning restore's newer-data conflict check, causing permanent false-positive conflicts; (2) restore was wiping the audit_event log wholesale instead of leaving it as an append-only record — see `docs/16_DATA_MIGRATION.md`; (3) `DATABASE_URL="file:./data/wealthforge.db"` resolved relative to `prisma/schema.prisma`'s directory, not repo root, silently writing the live database to `prisma/data/wealthforge.db` — a path `.gitignore` didn't cover, so `git add prisma/` would have committed the real database. Fixed by changing the path to `file:../data/...` (documented inline in `.env.example`) and adding a `**/*.db` defense-in-depth rule to `.gitignore` regardless of path. No known open issues. | — | (pending commit) | 2026-08-30 |
 | M3 | Budget ingestion vertical slice | COMPLETE | `src/ingestion/`: exceljs parser, sheet classifier, normalization/validation, content-hash diff engine, import orchestrator with revisions and Import Audit | 25 ingestion tests (12 unit + 13 fixture-based integration) covering all 5 classifications, idempotency, corrected month, rename, deletion, malformed cells, unexpected sheet, conflict, duplicates | pnpm typecheck/lint/test/build all passed clean this session | One real bug found by the test suite and fixed: a renamed sheet was treated as a new period and duplicated every line of that month, double-counting it in all totals. Parser is validated against synthetic fixtures only — D-005 still open, real workbook needed to confirm column/label conventions. | D-005 (final validation), D-009 (resolved) | (pending commit) | 2026-08-30 |
 | M4 | Deterministic financial engine | COMPLETE | `src/domain/`: money/dates primitives, `Computed<T>` insufficiency contract, trust filtering, net worth, portfolio valuation + allocation + concentration, budget summary + Plan vs Reality, goals + projections + allocation guards, EMI payer split + burden + release, CAGR/XIRR/P&L. `src/data/loaders.ts` keeps the domain database-free | 89 domain tests + 4 end-to-end (workbook → engine) — 122 across the suite | pnpm typecheck/lint/test/build all passed clean this session | One real bug found by the test suite and fixed: `setUTCMonth` month-end overflow made 31 Aug + 10 months land on 1 July instead of 30 June, which could flip a goal's "misses target date" verdict. Fixed with `addMonthsClamped`, applied to both goal and EMI projections. | D-010 (resolved) | (pending commit) | 2026-08-30 |
-| M5 | Portfolio ingestion | NOT STARTED | Equity/ETF/MF snapshot imports | Representative snapshot tests | Pending | — | D-006 (integration timing) | — | — |
+| M5 | Portfolio ingestion | COMPLETE | `src/ingestion/portfolio/`: RFC 4180 CSV reader + XLSX path, column alias tolerance, instrument resolution, snapshot revisions, observed-change detection with transaction reconciliation, Portfolio Import Audit. Schema: position cost basis + supersede pointer, activity quantity | 16 snapshot tests over 9 fixtures, including a slice proving imported data flows into the M4 valuation engine — 138 across the suite | pnpm typecheck/lint/test/build all passed clean this session | One real bug found by the test suite and fixed: two duplicate rows within one file were treated as a correction, so the second silently superseded the first — dropping a real lot, the exact loss the duplicate flagging exists to prevent. Corrections are now cross-import only. Column layouts validated against synthetic fixtures only; real broker exports still needed (D-005). | D-011 (resolved); D-006 still deferred and not blocking | (pending commit) | 2026-08-30 |
 | M6 | Dashboard V1 | NOT STARTED | Command Center, Budget, Portfolio, Goals, Liabilities screens | Visual + E2E | Pending | — | — | — | — |
 | M7 | Analytics | NOT STARTED | Periods, filters, Plan vs Reality | Range/insufficient-data tests | Pending | — | — | — | — |
 | M8 | Manual controls | NOT STARTED | Overrides across all domains | Audit/recalculation tests | Pending | — | — | — | — |
@@ -114,7 +114,39 @@ with the real file — that is the designed extension point.
 - [x] 122 tests pass; `pnpm typecheck`, `pnpm lint`, `pnpm build` all
       verified passing this session.
 
-**M4 is COMPLETE.** Next milestone: **M5 — Portfolio ingestion** (equity/
-ETF/MF snapshot imports) per `docs/09_INGESTION_ARCHITECTURE.md`. Note the
-portfolio *valuation* engine already exists and is tested (M4); M5 supplies
-it with real position and price data.
+**M4 is COMPLETE.**
+
+## M5 exit gate (from source build plan §19)
+
+"Representative snapshots pass." Tracked here explicitly:
+
+- [x] Equity, ETF, and mutual fund snapshots import from both CSV and XLSX.
+- [x] Instruments are resolved or created by asset class + identifier;
+      fractional MF units survive intact.
+- [x] Reported prices become dated valuations; an unparseable price yields
+      no valuation rather than a fabricated one.
+- [x] Same-date corrections create revisions and retain the original;
+      later-date changes are new observations and both rows stand.
+- [x] An observed quantity change is reported and reconciled against
+      recorded transactions where possible — never converted into an
+      invented buy or sell. Verified by asserting zero `buy` activity exists
+      after an unexplained 50 → 75 increase.
+- [x] Repeat import is idempotent: no duplicate positions, valuations, or
+      source documents.
+- [x] Malformed rows, duplicate holdings, and unusable layouts are flagged
+      or refused, never coerced.
+- [x] **Representative snapshots pass end to end**: imported data feeds the
+      M4 valuation engine, which values the portfolio at an asserted exact
+      total with zero exclusions, and correctly reports insufficient-data
+      when every holding is flagged.
+- [x] 138 tests pass; `pnpm typecheck`, `pnpm lint`, `pnpm build` all
+      verified passing this session.
+
+Same caveat as M3: layouts are validated against synthetic fixtures, since
+no real broker export was supplied (D-005). `COLUMN_ALIASES` in
+`normalizeSnapshot.ts` is the designed adjustment point.
+
+**M5 is COMPLETE.** Next milestone: **M6 — Dashboard V1** (Command Center,
+Budget, Portfolio, Goals, Liabilities) per `docs/10_DASHBOARD_SPEC.md`. The
+data model, ingestion, and engine beneath it are now all tested, which is
+the precondition the build plan set for starting UI work.
