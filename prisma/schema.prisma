@@ -1,0 +1,275 @@
+// WEALTHFORGE OS — Prisma schema
+// Implements docs/06_DATABASE_SCHEMA.md on SQLite (docs/decisions/0001-local-persistence.md).
+//
+// SQLite notes that shape this file:
+// - No native enum type: fields documented as enums in docs/06 are `String`
+//   here, validated at the application boundary (src/domain, src/ingestion)
+//   against the allowed-value lists given in each field's comment below.
+//   Never trust a raw string from this column without validating it against
+//   that list first.
+// - No native Json type on the SQLite connector: `*Json` fields store a
+//   serialized JSON string, parsed/stringified at the application boundary.
+// - Money is stored as `Int` minor units (paise), never `Float`, per
+//   docs/07_FINANCIAL_CALCULATIONS.md "Rounding & currency handling".
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// --- Source & ingestion -----------------------------------------------
+
+model SourceDocument {
+  id          String   @id @default(cuid())
+  fileName    String
+  fileHash    String   @unique
+  uploadedAt  DateTime @default(now())
+  kind        String // budget_workbook | portfolio_snapshot | manual
+  rawBlobPath String?
+
+  sheetSnapshots    SheetSnapshot[]
+  planRecords       PlanRecord[]
+  positionSnapshots PositionSnapshot[]
+  activities        Activity[]
+
+  @@map("source_document")
+}
+
+model SheetSnapshot {
+  id               String   @id @default(cuid())
+  sourceDocumentId String
+  sourceDocument   SourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+  sheetName        String
+  sheetKind        String // month | reference | unrecognized
+  classification   String // new | modified | unchanged | deleted_renamed | conflict
+  rawDataJson      String
+  importedAt       DateTime @default(now())
+
+  planRecords PlanRecord[]
+
+  @@index([sourceDocumentId])
+  @@map("sheet_snapshot")
+}
+
+// --- Plan ---------------------------------------------------------------
+
+model PlanRecord {
+  id               String   @id @default(cuid())
+  periodMonth      String // ISO "YYYY-MM"
+  category         String // income | expense | investment | emi
+  labelRaw         String
+  labelNormalized  String
+  amountMinorUnits Int
+  currency         String   @default("INR")
+
+  sourceDocumentId String?
+  sourceDocument   SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+  sheetSnapshotId  String?
+  sheetSnapshot    SheetSnapshot?  @relation(fields: [sheetSnapshotId], references: [id])
+
+  trustState String  @default("extracted") // extracted | needs_review | validated | verified | rejected | superseded
+  // Points forward to the PlanRecord that supersedes this one, if any.
+  // Plain scalar pointer (not a Prisma relation) — see docs/08_DATA_TRUST_MODEL.md.
+  // The prior value is never deleted when superseded.
+  supersededById String?
+
+  createdAt DateTime @default(now())
+
+  @@index([periodMonth, category])
+  @@index([supersededById])
+  @@map("plan_record")
+}
+
+// --- Position & valuation -------------------------------------------------
+
+model Instrument {
+  id          String @id @default(cuid())
+  kind        String // equity | etf | mutual_fund | gold | silver | epf | cash
+  identifier  String? // ticker / ISIN / scheme code, where applicable
+  displayName String
+
+  positionSnapshots PositionSnapshot[]
+  valuations        Valuation[]
+  activities        Activity[]
+
+  @@map("instrument")
+}
+
+model PositionSnapshot {
+  id         String   @id @default(cuid())
+  instrumentId String
+  instrument   Instrument @relation(fields: [instrumentId], references: [id])
+  asOfDate     DateTime
+  quantity     Float // units/shares/grams — not currency, Float is acceptable here
+  unit         String // shares | units | grams | rupees
+
+  sourceDocumentId String?
+  sourceDocument   SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+  trustState       String   @default("extracted")
+  createdAt        DateTime @default(now())
+
+  @@index([instrumentId, asOfDate])
+  @@map("position_snapshot")
+}
+
+model Valuation {
+  id               String   @id @default(cuid())
+  instrumentId     String
+  instrument       Instrument @relation(fields: [instrumentId], references: [id])
+  asOfDate         DateTime
+  priceMinorUnits  Int
+  currency         String   @default("INR")
+  source           String
+  fetchedAt        DateTime @default(now())
+
+  @@index([instrumentId, asOfDate])
+  @@map("valuation")
+}
+
+// --- Activity -------------------------------------------------------------
+
+model Activity {
+  id     String @id @default(cuid())
+  kind   String // buy | sell | sip | goal_contribution | goal_withdrawal | emi_payment | one_time_income | one_time_expense
+
+  instrumentId String?
+  instrument   Instrument? @relation(fields: [instrumentId], references: [id])
+  goalId       String?
+  goal         Goal?       @relation(fields: [goalId], references: [id])
+  liabilityId  String?
+  liability    Liability?  @relation(fields: [liabilityId], references: [id])
+
+  amountMinorUnits Int
+  occurredOn       DateTime
+
+  sourceDocumentId String?
+  sourceDocument   SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+  trustState       String   @default("extracted")
+  createdAt        DateTime @default(now())
+
+  @@index([goalId, occurredOn])
+  @@index([liabilityId, occurredOn])
+  @@map("activity")
+}
+
+// --- Liabilities ------------------------------------------------------
+
+model Liability {
+  id                     String   @id @default(cuid())
+  name                   String
+  kind                   String // home_loan | other
+  principalMinorUnits    Int
+  outstandingMinorUnits  Int
+  outstandingAsOf        DateTime
+  interestRateBps        Int // basis points, e.g. 850 = 8.50%
+  tenureMonths           Int
+  emiAmountMinorUnits    Int
+  createdAt              DateTime @default(now())
+
+  payerSplits LiabilityPayerSplit[]
+  activities  Activity[]
+
+  @@map("liability")
+}
+
+model LiabilityPayerSplit {
+  id            String   @id @default(cuid())
+  liabilityId   String
+  liability     Liability @relation(fields: [liabilityId], references: [id], onDelete: Cascade)
+  payerName     String
+  shareBps      Int // basis points of the EMI this payer covers; splits for a liability must sum to 10000
+  effectiveFrom DateTime
+
+  @@index([liabilityId])
+  @@map("liability_payer_split")
+}
+
+// --- Goals --------------------------------------------------------------
+
+model Goal {
+  id                    String    @id @default(cuid())
+  name                  String
+  kind                  String // emergency_fund | car | marriage | third_floor | custom
+  targetAmountMinorUnits Int
+  targetDate            DateTime?
+  priorityRank          Int
+  lifecycleState        String   @default("planned") // planned | in_progress | achieved | on_hold | cancelled
+  createdAt             DateTime @default(now())
+
+  activities Activity[]
+  // currentAmount is NEVER a column — it is always derived by summing
+  // this goal's Activity rows (goal_contribution minus goal_withdrawal).
+  // See docs/05_DOMAIN_MODEL.md invariants.
+
+  @@map("goal")
+}
+
+// --- Insurance ------------------------------------------------------------
+
+model InsurancePolicy {
+  id                    String   @id @default(cuid())
+  kind                  String // health_personal | health_family | term | other
+  insuredParty          String
+  coverAmountMinorUnits Int
+  premiumMinorUnits     Int
+  premiumFrequency      String // monthly | quarterly | annual
+  provider              String
+  status                String // active | planned | lapsed
+  effectiveFrom         DateTime?
+  createdAt             DateTime @default(now())
+
+  @@map("insurance_policy")
+}
+
+// --- Revisions, manual adjustments, audit ----------------------------------
+
+model Revision {
+  id               String   @id @default(cuid())
+  entityType       String // e.g. "plan_record", "position_snapshot"
+  entityId         String
+  originalValueJson String
+  revisedValueJson  String
+  source            String
+  reason            String?
+  createdAt         DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("revision")
+}
+
+model ManualAdjustment {
+  id                 String   @id @default(cuid())
+  entityType         String
+  entityId           String
+  sourceValueJson    String
+  adjustmentJson     String
+  resultingValueJson String
+  reason             String?
+  createdAt          DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("manual_adjustment")
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  kind      String // import | revision | manual_override | rule_change | backup | restore
+  payloadJson String
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@map("audit_event")
+}
+
+model AppSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  valueJson String
+  updatedAt DateTime @updatedAt
+
+  @@map("app_setting")
+}

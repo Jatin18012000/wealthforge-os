@@ -4,6 +4,16 @@ Storage: SQLite, accessed via Prisma (`docs/decisions/0001-local-persistence.md`
 Schema is frozen for M2 at the shape below; changes after M2 go through a
 Prisma migration plus an ADR if the change is structural.
 
+**Implemented** in `prisma/schema.prisma` (migration `20260830104125_init`).
+Two SQLite-specific deviations from a naive reading of this doc, both noted
+inline in the schema file itself: no native enum type (documented enum
+fields are `String`, validated at the application boundary against the
+allowed-value list) and no native `Json` type (documented `*_json` fields
+are `String` columns holding serialized JSON). `superseded_by_id` on
+`plan_record` is a plain scalar column, not a Prisma relation, to avoid
+Prisma self-relation ambiguity — referential integrity for it is enforced
+at the application layer, not by a database foreign key.
+
 This is the initial schema design (M1 freeze target for M2 implementation).
 Field lists are representative of the required data, not exhaustive DDL —
 exact column types/constraints are finalized when `schema.prisma` is written
