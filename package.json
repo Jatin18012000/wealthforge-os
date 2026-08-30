@@ -2,7 +2,7 @@
   "name": "wealthforge-os",
   "version": "0.1.0",
   "private": true,
-  "description": "WEALTHFORGE OS — local-first personal financial operating system",
+  "description": "WEALTHFORGE OS \u2014 local-first personal financial operating system",
   "engines": {
     "node": ">=20"
   },
@@ -20,7 +20,9 @@
     "prisma:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "backup:export": "tsx scripts/backup-cli.ts export",
-    "backup:restore": "tsx scripts/backup-cli.ts restore"
+    "backup:restore": "tsx scripts/backup-cli.ts restore",
+    "db:demo": "tsx prisma/demo-seed.ts",
+    "db:reset": "prisma migrate reset --force"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
