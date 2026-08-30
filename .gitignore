@@ -21,6 +21,17 @@ data/*.db-journal
 data/*.db-wal
 data/*.db-shm
 data/uploads/
+data/backups/
+# Defense in depth: Prisma resolves a relative SQLite path in DATABASE_URL
+# relative to prisma/schema.prisma's directory, not the process cwd — a
+# misconfigured .env can silently write the live database to prisma/data/
+# instead of the intended repo-root data/ (see .env.example). Catch *.db
+# anywhere, not just under data/, so that mistake can never commit real
+# financial data regardless of where Prisma actually put the file.
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
 
 # logs
 *.log
