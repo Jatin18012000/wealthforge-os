@@ -36,6 +36,21 @@ project's "clone and run without paid third-party services" spirit found
 throughout the sibling project's cost philosophy and this project's own
 local-first mandate; cloud providers remain fully supported as an opt-in.
 
+## Resolved during M3
+
+### D-009: Period attribution for bare month sheet names
+**Decision:** `importBudgetWorkbook` takes a required `defaultYear`
+parameter. A sheet name carrying its own year ("Aug-26", "August 2027",
+"2026-08") overrides it; a bare name ("August") uses it.
+**Why:** the fixtures — and, per the controlling documents, the real
+workbook — name sheets by bare month. A bare month name genuinely does not
+determine a year, and inferring one from the file's timestamp or the
+current date would silently misattribute an entire month of financial data
+the first time a workbook is imported in a later year. Making the caller
+state it keeps the assumption explicit and auditable.
+**Still to confirm against the real workbook:** whether its month sheets
+carry years. If they do, `defaultYear` becomes a fallback that never fires.
+
 ## Open — genuinely unresolved, flagging rather than guessing
 
 ### D-005: No actual 2026 budget workbook file was supplied

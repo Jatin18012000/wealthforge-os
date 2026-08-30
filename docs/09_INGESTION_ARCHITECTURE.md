@@ -46,6 +46,49 @@ file).
 10. **Store provenance** on every extracted record: source file, hash, sheet
     name, field reference, import timestamp, revision pointer.
 
+## Implementation notes (M3)
+
+Implemented in `src/ingestion/`: `parseWorkbook.ts` (exceljs read),
+`sheetClassifier.ts` (month/reference/unrecognized), `normalize.ts`
+(label/category normalization, amount and date validation), `diff.ts`
+(classification against history), `importWorkbook.ts` (persistence,
+revisions, Import Audit). Parsing, normalization, and diffing are pure
+functions over plain data — only `importWorkbook.ts` touches the database.
+
+Decisions made while implementing, each chosen to avoid guessing at money:
+
+- **Period attribution.** Bare month sheet names ("August") carry no year,
+  so `importBudgetWorkbook` takes a required `defaultYear`. A sheet name
+  that carries its own year ("Aug-26", "2026-08") overrides it. The year is
+  never inferred from the file or the clock (see `19_OPEN_DECISIONS.md`,
+  D-009).
+- **Reference sheets produce no plan records.** A reference sheet such as
+  "Core expenses" carries no period; attributing its rows to a budget month
+  would be inventing data. Its content is still hashed, diffed, and retained
+  in full for provenance.
+- **Content hashing excludes row numbers and cell references.** Inserting a
+  blank spacer row shifts every reference below it without changing any
+  financial claim, so such an edit is correctly `UNCHANGED`.
+- **Unparseable amounts store NULL, never 0.** "No extractable value" and
+  "zero rupees" are different claims. The `plan_record.amountMinorUnits`
+  column is nullable for exactly this reason.
+- **Reconciliation is keyed on the period, not on sheet novelty.** A renamed
+  sheet is a *new sheet* covering an *existing period*; an earlier version
+  skipped reconciliation for new sheets and duplicated every line of the
+  renamed month, double-counting it in every total. Caught by
+  `tests/ingestion/importWorkbook.test.ts`.
+- **CONFLICT writes nothing.** A sheet asserting two different amounts for
+  the same line has no authoritative reading, so no record from it is
+  persisted — the sheet is retained and surfaced for a human instead. Other
+  sheets in the same file still import normally.
+- **Exact duplicate rows are flagged, not resolved.** Two identical rows
+  could be a copy-paste slip (collapsing is right) or two genuine lines
+  (keeping both is right). The file cannot distinguish them, so both copies
+  are flagged `needs_review` — excluded from totals, retained in full.
+- **A line that disappears from a sheet is flagged, never deleted.** It is
+  marked `needs_review` with a revision recording the disappearance, so a
+  human decides whether the removal was intentional.
+
 ## Idempotency
 
 Re-uploading a byte-identical workbook must result in every sheet classified
