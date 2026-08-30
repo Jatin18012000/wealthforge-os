@@ -192,13 +192,48 @@ milestone through M12. **Decision deferred**, not required to unblock any
 current milestone. Will be raised as a single question if/when M5+ work
 would otherwise require guessing an auth approach.
 
-### D-007: Market data provider selection
+### D-007: Market data provider selection — RESOLVED (M10)
 
 The source documents require tracking Nifty 50, Sensex, Nifty Bank, Nifty
 Metal with an "explicit provider + freshness policy" (source doc §7 tools
-table) but do not name a provider. **Decision deferred to M10** — will
-evaluate free/self-hostable options first per project cost philosophy and
-propose one rather than guessing a paid dependency into the critical path.
+table) but do not name a provider. Full evaluation in
+`docs/MARKET_DATA_PROVIDER_EVALUATION.md`.
+
+**Decision:** a provider abstraction (`src/market/`) with two free sources,
+neither ever required:
+
+- **AMFI `NAVAll.txt`** (official, free, unauthenticated) for mutual fund
+  NAVs — primary and sufficient on its own for MF tracking.
+- **Yahoo Finance's unofficial chart endpoint** (free, no key, but
+  unofficial with no SLA — documented risk) for index levels (Nifty 50,
+  Nifty Bank, Sensex) and individual equity/ETF prices, polled
+  conservatively (default once daily).
+- **Manual entry** (already built in M8) is the permanent fallback under
+  both — every fetched value lands in the same `Valuation` table a manual
+  entry writes to, so the engine needs no special case for where a price
+  came from.
+
+**Nifty Metal has no reliable free symbol on either source** — tracked
+separately as D-016 rather than guessed at.
+
+This sandboxed build environment's egress proxy blocks both hosts outright
+(`connect_rejected` — organization policy, neither on the allowlist),
+which could not be worked around and is not a defect: it is direct
+confirmation that the app's core features do not depend on either being
+reachable. Live behavior against the real endpoints must be verified on a
+normal internet-connected deployment; this repo's tests use recorded
+fixture responses rather than live calls.
+
+### D-016: No reliable free source for Nifty Metal
+
+Neither AMFI (indices are out of scope for it) nor Yahoo Finance's
+unofficial endpoint has a verified, stable symbol for the Nifty Metal
+index. Rather than guess at an unverified symbol — which risks exactly the
+"market data becomes financial history" failure the project prohibits —
+Nifty Metal tracking falls back to manual entry only until a reliable free
+source is found. **Not blocking M10**; the market-data layer is designed
+so a missing index source degrades to "no data" (never a guessed number),
+which is the documented, tested behavior for this case.
 
 ### D-008: Packaging beyond `pnpm dev`/`pnpm start`
 

@@ -98,3 +98,17 @@ purchases between the 3rd and 8th August statements exercise the
 observed-change path exactly as designed. What M5 lacked was a *source
 adapter for the real layout*, which has been added alongside the existing
 generic path rather than replacing it. All 16 original M5 tests still pass.
+
+## 8 · M10 re-check (market data)
+
+Re-scanned all five reference reports and both controlling documents
+before starting M10: none contain a market-data provider, index-tracking
+methodology, or live-price schema — the reference material's scope was
+budget/portfolio *ingestion layouts*, not market-data sourcing. D-007
+(market data provider selection) is therefore resolved from Level 4/5
+(source-doc requirements + engineering judgment via
+`docs/MARKET_DATA_PROVIDER_EVALUATION.md`), not from a reference report —
+there is nothing in the reference library that a market-data decision
+could silently override. `Valuation.source`/`Valuation.fetchedAt`
+(existing since M2's schema) already model exactly what a fetched price
+needs; no reference-driven schema change was required for M10.
