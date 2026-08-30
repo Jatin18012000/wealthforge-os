@@ -18,6 +18,7 @@ const LINKS = [
   { href: "/settings", label: "Settings" },
   { href: "/market", label: "Market" },
   { href: "/data-center", label: "Data Center" },
+  { href: "/ai-analyst", label: "AI Analyst" },
 ] as const;
 
 export function Nav() {

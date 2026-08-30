@@ -54,6 +54,11 @@ function summarize(row: AuditEventRow): string {
       return p.action === "revoked"
         ? `Override withdrawn on ${String(p.entityType)}.${String(p.field)}`
         : `${String(p.entityType)}.${String(p.field)} overridden`;
+    case "ai_explanation": {
+      if (p.outcome === "shown")
+        return `AI Analyst explanation shown (${String(p.providerName)})`;
+      return `AI Analyst explanation ${String(p.outcome)} — ${String(p.reason)}`;
+    }
     case "market_refresh": {
       if (!Array.isArray(payload)) return "Market data refreshed";
       const parts = payload.map((entry) => {

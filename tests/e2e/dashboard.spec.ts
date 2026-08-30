@@ -547,3 +547,44 @@ test.describe("Market report", () => {
     ).toBeVisible();
   });
 });
+
+test.describe("AI Analyst", () => {
+  test("shows AI unavailable gracefully when no local provider is reachable", async ({
+    page,
+  }) => {
+    // Genuine, not simulated: this sandbox has no Ollama running, exactly
+    // the "Optional AI provider unavailable" case docs/18_FAILURE_MODES.md
+    // requires the app to survive.
+    await page.goto("/ai-analyst");
+    await expect(
+      page.getByRole("heading", { level: 1, name: "AI Analyst" }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Explain this period" }).click();
+    await page.waitForURL(/ai-analyst\?event=/);
+    await page.reload();
+
+    await expect(page.getByRole("heading", { name: "AI unavailable" })).toBeVisible();
+    await expect(page.getByText(/could not reach Ollama|needs an API key/)).toBeVisible();
+    await expect(
+      page.getByText("Every other screen keeps working normally"),
+    ).toBeVisible();
+  });
+
+  test("every other screen still works after an AI failure", async ({ page }) => {
+    await page.goto("/ai-analyst");
+    await page.getByRole("button", { name: "Explain this period" }).click();
+    await page.waitForURL(/ai-analyst\?event=/);
+
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Command Center" }),
+    ).toBeVisible();
+  });
+
+  test("has exactly one h1 and a labelled nav", async ({ page }) => {
+    await page.goto("/ai-analyst");
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+});

@@ -310,7 +310,7 @@ model ManualAdjustment {
 
 model AuditEvent {
   id        String   @id @default(cuid())
-  kind      String // import | revision | manual_override | rule_change | backup | restore | market_refresh
+  kind      String // import | revision | manual_override | rule_change | backup | restore | market_refresh | ai_explanation
   payloadJson String
   createdAt DateTime @default(now())
 
