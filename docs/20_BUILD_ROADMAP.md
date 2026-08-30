@@ -10,7 +10,7 @@ passing in an actual session (tests run, not assumed).
 | M1 | Architecture freeze | COMPLETE | Requirements/domain/schema/ingestion/IA/trust-model/calculation docs authored and reviewed as part of M0's combined docs pass (low-risk, documentation-only work; no reason to gate it behind a separate session) | N/A | Docs cross-checked against both controlling source documents for contradictions — none found | — | — | c768f74 | 2026-08-30 |
 | M2 | Local persistence | COMPLETE | `schema.prisma` (15 tables), initial migration applied, `src/lib/db.ts` client singleton, `prisma/seed.ts` dev fixtures, `src/backup/` export/restore skeleton + CLI | 8 tests: goal/activity derivation invariant, revision non-destructive update, idempotency check, backup/restore round-trip, conflict-blocks-restore, forced restore, audit-event recording — all passing | pnpm typecheck/lint/test/build all passed clean this session | Three real defects found and fixed same session (test suite caught two of them; manual verification caught the third): (1) audit_event timestamps were poisoning restore's newer-data conflict check, causing permanent false-positive conflicts; (2) restore was wiping the audit_event log wholesale instead of leaving it as an append-only record — see `docs/16_DATA_MIGRATION.md`; (3) `DATABASE_URL="file:./data/wealthforge.db"` resolved relative to `prisma/schema.prisma`'s directory, not repo root, silently writing the live database to `prisma/data/wealthforge.db` — a path `.gitignore` didn't cover, so `git add prisma/` would have committed the real database. Fixed by changing the path to `file:../data/...` (documented inline in `.env.example`) and adding a `**/*.db` defense-in-depth rule to `.gitignore` regardless of path. No known open issues. | — | (pending commit) | 2026-08-30 |
 | M3 | Budget ingestion vertical slice | COMPLETE | `src/ingestion/`: exceljs parser, sheet classifier, normalization/validation, content-hash diff engine, import orchestrator with revisions and Import Audit | 25 ingestion tests (12 unit + 13 fixture-based integration) covering all 5 classifications, idempotency, corrected month, rename, deletion, malformed cells, unexpected sheet, conflict, duplicates | pnpm typecheck/lint/test/build all passed clean this session | One real bug found by the test suite and fixed: a renamed sheet was treated as a new period and duplicated every line of that month, double-counting it in all totals. Parser is validated against synthetic fixtures only — D-005 still open, real workbook needed to confirm column/label conventions. | D-005 (final validation), D-009 (resolved) | (pending commit) | 2026-08-30 |
-| M4 | Deterministic financial engine | NOT STARTED | Net worth, budget, P&L, allocation, EMI, goals | Fixture-result tests | Pending | — | — | — | — |
+| M4 | Deterministic financial engine | COMPLETE | `src/domain/`: money/dates primitives, `Computed<T>` insufficiency contract, trust filtering, net worth, portfolio valuation + allocation + concentration, budget summary + Plan vs Reality, goals + projections + allocation guards, EMI payer split + burden + release, CAGR/XIRR/P&L. `src/data/loaders.ts` keeps the domain database-free | 89 domain tests + 4 end-to-end (workbook → engine) — 122 across the suite | pnpm typecheck/lint/test/build all passed clean this session | One real bug found by the test suite and fixed: `setUTCMonth` month-end overflow made 31 Aug + 10 months land on 1 July instead of 30 June, which could flip a goal's "misses target date" verdict. Fixed with `addMonthsClamped`, applied to both goal and EMI projections. | D-010 (resolved) | (pending commit) | 2026-08-30 |
 | M5 | Portfolio ingestion | NOT STARTED | Equity/ETF/MF snapshot imports | Representative snapshot tests | Pending | — | D-006 (integration timing) | — | — |
 | M6 | Dashboard V1 | NOT STARTED | Command Center, Budget, Portfolio, Goals, Liabilities screens | Visual + E2E | Pending | — | — | — | — |
 | M7 | Analytics | NOT STARTED | Periods, filters, Plan vs Reality | Range/insufficient-data tests | Pending | — | — | — | — |
@@ -92,5 +92,29 @@ Expect the column/label conventions in `src/ingestion/normalize.ts`
 (`COLUMN_ALIASES`, `CATEGORY_ALIASES`) to need adjustment on first contact
 with the real file — that is the designed extension point.
 
-Next milestone: **M4 — Deterministic financial engine** per
-`docs/07_FINANCIAL_CALCULATIONS.md`.
+## M4 exit gate (from source build plan §19)
+
+"Known fixture results match." Tracked here explicitly:
+
+- [x] Net worth, portfolio valuation, allocation, concentration, budget
+      summary, Plan vs Reality, goal progress, EMI burden/split/release,
+      CAGR, XIRR, and P&L all implemented in `src/domain/`.
+- [x] Domain layer is framework-free and database-free; an ESLint rule
+      enforces it and `src/data/loaders.ts` is the only bridge.
+- [x] All money is integer paise with banker's rounding applied once per
+      derived figure; `sumMinorUnits` rejects non-integers.
+- [x] Every calculation that can fail returns `Computed<T>` with explicit
+      reasons — no defaults, no assumed zeros, no estimates.
+- [x] Totals report their exclusions, so a figure is never quietly short.
+- [x] **Fixture results match**: `tests/domain/endToEnd.test.ts` imports the
+      real fixture workbook and asserts August's income, expenses, EMI,
+      investments, retained, unallocated, and savings rate against the
+      fixture's own numbers — plus the corrected-month case, where the
+      superseded value must not be double-counted.
+- [x] 122 tests pass; `pnpm typecheck`, `pnpm lint`, `pnpm build` all
+      verified passing this session.
+
+**M4 is COMPLETE.** Next milestone: **M5 — Portfolio ingestion** (equity/
+ETF/MF snapshot imports) per `docs/09_INGESTION_ARCHITECTURE.md`. Note the
+portfolio *valuation* engine already exists and is tested (M4); M5 supplies
+it with real position and price data.
