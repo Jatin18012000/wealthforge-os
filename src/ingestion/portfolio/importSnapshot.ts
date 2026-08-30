@@ -20,6 +20,13 @@ export interface ImportSnapshotOptions extends Partial<NormalizeOptions> {
    * portfolio — see D-011.
    */
   readonly asOf?: Date;
+  /**
+   * The name to record and display for this document, when it differs from
+   * `filePath`'s basename — see `ImportOptions.displayFileName` in
+   * `../importWorkbook.ts` for why (browser uploads via
+   * `src/ingestion/uploadStorage.ts`).
+   */
+  readonly displayFileName?: string;
 }
 
 /**
@@ -84,7 +91,12 @@ export async function importPortfolioSnapshot(
         if (created) valuationsCreated += 1;
       }
 
-      const change = await detectObservedChange(tx, instrument.id, position, snapshot.asOf);
+      const change = await detectObservedChange(
+        tx,
+        instrument.id,
+        position,
+        snapshot.asOf,
+      );
       if (change !== null) observedChanges.push(change);
 
       const outcome = await persistPosition(tx, {
@@ -115,7 +127,8 @@ export async function importPortfolioSnapshot(
     positionsUnchanged,
     positionsRevised,
     valuationsCreated,
-    rowsNeedingReview: snapshot.positions.filter((p) => p.trustState === "needs_review").length,
+    rowsNeedingReview: snapshot.positions.filter((p) => p.trustState === "needs_review")
+      .length,
     observedChanges,
     issues: [
       ...snapshot.fileIssues,
@@ -151,11 +164,12 @@ async function resolveSnapshot(
 ): Promise<ExtractedSnapshot> {
   const buffer = await readFile(filePath);
   const fileHash = hashBuffer(buffer);
-  const fileName = path.basename(filePath);
+  const fileName = options.displayFileName ?? path.basename(filePath);
 
-  const zerodha = path.extname(filePath).toLowerCase() === ".xlsx"
-    ? await extractZerodhaStatement(filePath, fileName, fileHash)
-    : null;
+  const zerodha =
+    path.extname(filePath).toLowerCase() === ".xlsx"
+      ? await extractZerodhaStatement(filePath, fileName, fileHash)
+      : null;
 
   if (zerodha !== null) {
     const statementDate = zerodha.asOf.getTime() === 0 ? null : zerodha.asOf;
@@ -188,7 +202,15 @@ async function resolveSnapshot(
   }
 
   const raw = await parseSnapshotFile(filePath);
-  return extractSnapshot(raw, { asOf: options.asOf, assetClass: options.assetClass });
+  // parseSnapshotFile derives its own fileName from the path, independent of
+  // the display-name override above (it has no reason to know about one) —
+  // so the override is re-applied here, exactly as the Zerodha branch above
+  // already gets it by construction (extractZerodhaStatement is called with
+  // `fileName` directly).
+  return {
+    ...extractSnapshot(raw, { asOf: options.asOf, assetClass: options.assetClass }),
+    fileName,
+  };
 }
 
 async function resolveInstrument(
@@ -275,7 +297,8 @@ async function detectObservedChange(
 
   const recordedTransactionQuantity = allHaveQuantity
     ? transactions.reduce(
-        (sum, t) => sum + (t.kind === "buy" ? (t.quantity as number) : -(t.quantity as number)),
+        (sum, t) =>
+          sum + (t.kind === "buy" ? (t.quantity as number) : -(t.quantity as number)),
         0,
       )
     : null;

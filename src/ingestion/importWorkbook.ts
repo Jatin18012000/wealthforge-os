@@ -19,6 +19,15 @@ export interface ImportOptions {
    * year. Sheet names carrying their own year ("Aug-26") override this.
    */
   defaultYear: number;
+  /**
+   * The name to record and display for this document, when it differs from
+   * `filePath`'s basename — e.g. a browser upload stored under a generated
+   * on-disk name (`src/ingestion/uploadStorage.ts`) whose original name
+   * should still appear in the Import Audit and provenance list. Defaults
+   * to the file's own basename, which is what every non-upload caller
+   * (scripts, tests) already relies on.
+   */
+  displayFileName?: string;
 }
 
 /**
@@ -36,7 +45,7 @@ export async function importBudgetWorkbook(
 ): Promise<ImportAudit> {
   const buffer = await readFile(filePath);
   const fileHash = hashBuffer(buffer);
-  const fileName = path.basename(filePath);
+  const fileName = options.displayFileName ?? path.basename(filePath);
 
   const existingDocument = await db.sourceDocument.findUnique({ where: { fileHash } });
   const isRepeatUpload = existingDocument !== null;
@@ -131,7 +140,8 @@ async function loadPriorSheetState(db: PrismaClient): Promise<PriorSheetState[]>
 
   const latest = new Map<string, string>();
   for (const snapshot of snapshots) {
-    if (!latest.has(snapshot.sheetName)) latest.set(snapshot.sheetName, snapshot.contentHash);
+    if (!latest.has(snapshot.sheetName))
+      latest.set(snapshot.sheetName, snapshot.contentHash);
   }
 
   return [...latest].map(([sheetName, contentHash]) => ({ sheetName, contentHash }));
@@ -199,12 +209,18 @@ async function applySheetRows(
     }
 
     const unchanged =
-      match.amountMinorUnits === row.amountMinorUnits && match.trustState === row.trustState;
+      match.amountMinorUnits === row.amountMinorUnits &&
+      match.trustState === row.trustState;
     if (unchanged) continue;
 
     // A corrected value never overwrites its predecessor. The prior record
     // is retained, marked superseded, and pointed at its replacement.
-    const replacement = await createPlanRecord(tx, row, sourceDocumentId, sheetSnapshotId);
+    const replacement = await createPlanRecord(
+      tx,
+      row,
+      sourceDocumentId,
+      sheetSnapshotId,
+    );
     await tx.planRecord.update({
       where: { id: match.id },
       data: { supersededById: replacement.id, trustState: "superseded" },

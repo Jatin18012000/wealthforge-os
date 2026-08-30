@@ -52,7 +52,9 @@ describe("budget workbook ingestion", () => {
       new Set(["2026-05", "2026-06", "2026-07", "2026-08"]),
     );
 
-    const reference = await db.sheetSnapshot.findFirst({ where: { sheetName: "Core expenses" } });
+    const reference = await db.sheetSnapshot.findFirst({
+      where: { sheetName: "Core expenses" },
+    });
     expect(reference?.sheetKind).toBe("reference");
   });
 
@@ -113,14 +115,20 @@ describe("budget workbook ingestion", () => {
 
     // Original retained, untouched in value, marked superseded and pointed
     // at its replacement.
-    const originalAfter = await db.planRecord.findUniqueOrThrow({ where: { id: before.id } });
+    const originalAfter = await db.planRecord.findUniqueOrThrow({
+      where: { id: before.id },
+    });
     expect(originalAfter.amountMinorUnits).toBe(8_100 * 100);
     expect(originalAfter.trustState).toBe("superseded");
     expect(originalAfter.supersededById).not.toBeNull();
 
     // Current effective value is the correction.
     const effective = await db.planRecord.findFirstOrThrow({
-      where: { periodMonth: "2026-08", labelNormalized: "groceries", supersededById: null },
+      where: {
+        periodMonth: "2026-08",
+        labelNormalized: "groceries",
+        supersededById: null,
+      },
     });
     expect(effective.amountMinorUnits).toBe(8_600 * 100);
 
@@ -150,15 +158,17 @@ describe("budget workbook ingestion", () => {
 
   it("flags a vanished sheet as deleted-or-renamed and keeps its history", async () => {
     await importBudgetWorkbook(db, BASE, OPTIONS);
-    const augustRecordsBefore = await db.planRecord.count({ where: { periodMonth: "2026-08" } });
+    const augustRecordsBefore = await db.planRecord.count({
+      where: { periodMonth: "2026-08" },
+    });
     expect(augustRecordsBefore).toBeGreaterThan(0);
 
     const audit = await importBudgetWorkbook(db, DELETED_AUGUST, OPTIONS);
 
     expect(audit.counts.deleted_renamed).toBe(1);
-    expect(audit.sheets.find((s) => s.classification === "deleted_renamed")?.sheetName).toBe(
-      "August",
-    );
+    expect(
+      audit.sheets.find((s) => s.classification === "deleted_renamed")?.sheetName,
+    ).toBe("August");
 
     // Historical data is sacred: the records survive the sheet's removal.
     expect(await db.planRecord.count({ where: { periodMonth: "2026-08" } })).toBe(
@@ -194,7 +204,9 @@ describe("budget workbook ingestion", () => {
 
     expect(audit.rowsNeedingReview).toBeGreaterThan(0);
 
-    const needsReview = await db.planRecord.findMany({ where: { trustState: "needs_review" } });
+    const needsReview = await db.planRecord.findMany({
+      where: { trustState: "needs_review" },
+    });
     expect(needsReview.length).toBeGreaterThan(0);
 
     // The unparseable "TBD" amount is stored as NULL, never as 0 — a missing
@@ -245,7 +257,9 @@ describe("budget workbook ingestion", () => {
     expect(await db.planRecord.count({ where: { periodMonth: "2026-07" } })).toBe(7);
 
     // The conflict is retained for review, not silently dropped.
-    const snapshot = await db.sheetSnapshot.findFirstOrThrow({ where: { sheetName: "August" } });
+    const snapshot = await db.sheetSnapshot.findFirstOrThrow({
+      where: { sheetName: "August" },
+    });
     expect(snapshot.classification).toBe("conflict");
     expect(audit.sheetIssues.some((i) => i.includes("Groceries"))).toBe(true);
   });
@@ -275,5 +289,35 @@ describe("budget workbook ingestion", () => {
     expect(payload.sheetsScanned).toBe(5);
     expect(payload.counts.new).toBe(5);
     expect(payload.fileHash).toHaveLength(64);
+  });
+});
+
+describe("displayFileName override", () => {
+  const testDb = createTestDb();
+  const db = testDb.db;
+
+  afterAll(async () => {
+    await testDb.cleanup();
+  });
+
+  it("records the display name instead of the on-disk path's basename when supplied", async () => {
+    // Mirrors what src/app/data-center/actions.ts does with a browser
+    // upload: the file lives on disk under a generated name, but the
+    // Import Audit and provenance list should show what the user uploaded.
+    const audit = await importBudgetWorkbook(db, BASE, {
+      ...OPTIONS,
+      displayFileName: "August Household Budget.xlsx",
+    });
+
+    expect(audit.fileName).toBe("August Household Budget.xlsx");
+
+    const stored = await db.sourceDocument.findFirst();
+    expect(stored?.fileName).toBe("August Household Budget.xlsx");
+  });
+
+  it("falls back to the path's basename when no override is given", async () => {
+    await db.sourceDocument.deleteMany();
+    const audit = await importBudgetWorkbook(db, BASE, OPTIONS);
+    expect(audit.fileName).toBe(path.basename(BASE));
   });
 });

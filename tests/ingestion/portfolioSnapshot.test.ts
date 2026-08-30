@@ -53,7 +53,11 @@ describe("portfolio snapshot ingestion", () => {
   });
 
   it("imports holdings, creating instruments, positions, and dated valuations", async () => {
-    const audit = await importPortfolioSnapshot(db, fixture("equity-v1-base.csv"), EQUITY);
+    const audit = await importPortfolioSnapshot(
+      db,
+      fixture("equity-v1-base.csv"),
+      EQUITY,
+    );
 
     expect(audit.rowsScanned).toBe(3);
     expect(audit.instrumentsCreated).toBe(3);
@@ -61,7 +65,9 @@ describe("portfolio snapshot ingestion", () => {
     expect(audit.valuationsCreated).toBe(3);
     expect(audit.rowsNeedingReview).toBe(0);
 
-    const infosys = await db.instrument.findFirstOrThrow({ where: { identifier: "INFY" } });
+    const infosys = await db.instrument.findFirstOrThrow({
+      where: { identifier: "INFY" },
+    });
     expect(infosys.displayName).toBe("Infosys Ltd");
 
     const position = await db.positionSnapshot.findFirstOrThrow({
@@ -82,7 +88,11 @@ describe("portfolio snapshot ingestion", () => {
 
   it("is idempotent: re-importing the same file changes nothing", async () => {
     await importPortfolioSnapshot(db, fixture("equity-v1-base.csv"), EQUITY);
-    const repeat = await importPortfolioSnapshot(db, fixture("equity-v1-base.csv"), EQUITY);
+    const repeat = await importPortfolioSnapshot(
+      db,
+      fixture("equity-v1-base.csv"),
+      EQUITY,
+    );
 
     expect(repeat.isRepeatUpload).toBe(true);
     expect(repeat.positionsUnchanged).toBe(3);
@@ -97,7 +107,11 @@ describe("portfolio snapshot ingestion", () => {
 
   it("treats a same-date change as a correction, superseding without deleting", async () => {
     await importPortfolioSnapshot(db, fixture("equity-v1-base.csv"), EQUITY);
-    const audit = await importPortfolioSnapshot(db, fixture("equity-v2-corrected.csv"), EQUITY);
+    const audit = await importPortfolioSnapshot(
+      db,
+      fixture("equity-v2-corrected.csv"),
+      EQUITY,
+    );
 
     expect(audit.positionsRevised).toBe(1);
 
@@ -136,7 +150,9 @@ describe("portfolio snapshot ingestion", () => {
     expect(audit.issues.some((i) => i.includes("not recorded as a trade"))).toBe(true);
 
     // Both observations stand; the earlier one is history, not a mistake.
-    const infosys = await db.instrument.findFirstOrThrow({ where: { identifier: "INFY" } });
+    const infosys = await db.instrument.findFirstOrThrow({
+      where: { identifier: "INFY" },
+    });
     const snapshots = await db.positionSnapshot.findMany({
       where: { instrumentId: infosys.id },
       orderBy: { asOfDate: "asc" },
@@ -151,7 +167,9 @@ describe("portfolio snapshot ingestion", () => {
   it("marks an observed change reconciled when a recorded transaction explains it", async () => {
     await importPortfolioSnapshot(db, fixture("equity-v1-base.csv"), EQUITY);
 
-    const infosys = await db.instrument.findFirstOrThrow({ where: { identifier: "INFY" } });
+    const infosys = await db.instrument.findFirstOrThrow({
+      where: { identifier: "INFY" },
+    });
     await db.activity.create({
       data: {
         kind: "buy",
@@ -175,26 +193,40 @@ describe("portfolio snapshot ingestion", () => {
   });
 
   it("flags malformed rows for review instead of coercing them", async () => {
-    const audit = await importPortfolioSnapshot(db, fixture("equity-v4-malformed.csv"), EQUITY);
+    const audit = await importPortfolioSnapshot(
+      db,
+      fixture("equity-v4-malformed.csv"),
+      EQUITY,
+    );
 
     expect(audit.rowsScanned).toBe(3); // the blank row is skipped, not flagged
     expect(audit.rowsNeedingReview).toBe(3);
 
-    const flagged = await db.positionSnapshot.findMany({ where: { trustState: "needs_review" } });
+    const flagged = await db.positionSnapshot.findMany({
+      where: { trustState: "needs_review" },
+    });
     expect(flagged).toHaveLength(3);
 
     // An unparseable price yields no valuation rather than a fabricated one.
-    const niftybees = await db.instrument.findFirstOrThrow({ where: { identifier: "NIFTYBEES" } });
+    const niftybees = await db.instrument.findFirstOrThrow({
+      where: { identifier: "NIFTYBEES" },
+    });
     expect(await db.valuation.count({ where: { instrumentId: niftybees.id } })).toBe(0);
   });
 
   it("flags a duplicated holding rather than summing or dropping it", async () => {
-    const audit = await importPortfolioSnapshot(db, fixture("equity-v5-duplicate.csv"), EQUITY);
+    const audit = await importPortfolioSnapshot(
+      db,
+      fixture("equity-v5-duplicate.csv"),
+      EQUITY,
+    );
 
     expect(audit.rowsNeedingReview).toBe(2);
     expect(audit.issues.some((i) => i.includes("appears 2 times"))).toBe(true);
 
-    const infosys = await db.instrument.findFirstOrThrow({ where: { identifier: "INFY" } });
+    const infosys = await db.instrument.findFirstOrThrow({
+      where: { identifier: "INFY" },
+    });
     const positions = await db.positionSnapshot.findMany({
       where: { instrumentId: infosys.id },
     });
@@ -212,7 +244,9 @@ describe("portfolio snapshot ingestion", () => {
   it("parses quoted CSV fields correctly on import", async () => {
     await importPortfolioSnapshot(db, fixture("equity-v6-quoted.csv"), EQUITY);
 
-    const infosys = await db.instrument.findFirstOrThrow({ where: { identifier: "INFY" } });
+    const infosys = await db.instrument.findFirstOrThrow({
+      where: { identifier: "INFY" },
+    });
     expect(infosys.displayName).toBe("Infosys Ltd, India");
 
     const tcs = await db.instrument.findFirstOrThrow({ where: { identifier: "TCS" } });
@@ -220,10 +254,16 @@ describe("portfolio snapshot ingestion", () => {
   });
 
   it("refuses an export with no usable quantity column, writing nothing", async () => {
-    const audit = await importPortfolioSnapshot(db, fixture("equity-v7-unusable-layout.csv"), EQUITY);
+    const audit = await importPortfolioSnapshot(
+      db,
+      fixture("equity-v7-unusable-layout.csv"),
+      EQUITY,
+    );
 
     expect(audit.rowsScanned).toBe(0);
-    expect(audit.issues.some((i) => i.includes("no recognizable quantity column"))).toBe(true);
+    expect(audit.issues.some((i) => i.includes("no recognizable quantity column"))).toBe(
+      true,
+    );
     expect(await db.positionSnapshot.count()).toBe(0);
   });
 
@@ -235,7 +275,9 @@ describe("portfolio snapshot ingestion", () => {
 
     expect(audit.positionsCreated).toBe(2);
 
-    const fund = await db.instrument.findFirstOrThrow({ where: { identifier: "120503" } });
+    const fund = await db.instrument.findFirstOrThrow({
+      where: { identifier: "120503" },
+    });
     const position = await db.positionSnapshot.findFirstOrThrow({
       where: { instrumentId: fund.id },
     });
@@ -246,17 +288,25 @@ describe("portfolio snapshot ingestion", () => {
     // The reported invested total is used verbatim, not recomputed.
     expect(position.costBasisMinorUnits).toBe(85_000 * 100);
 
-    const valuation = await db.valuation.findFirstOrThrow({ where: { instrumentId: fund.id } });
+    const valuation = await db.valuation.findFirstOrThrow({
+      where: { instrumentId: fund.id },
+    });
     expect(valuation.priceMinorUnits).toBe(7890); // Rs 78.9012 rounds to paise
   });
 
   it("imports an XLSX export equivalently to CSV", async () => {
-    const audit = await importPortfolioSnapshot(db, fixture("equity-v9-xlsx-export.xlsx"), EQUITY);
+    const audit = await importPortfolioSnapshot(
+      db,
+      fixture("equity-v9-xlsx-export.xlsx"),
+      EQUITY,
+    );
 
     expect(audit.rowsScanned).toBe(2);
     expect(audit.positionsCreated).toBe(2);
 
-    const infosys = await db.instrument.findFirstOrThrow({ where: { identifier: "INFY" } });
+    const infosys = await db.instrument.findFirstOrThrow({
+      where: { identifier: "INFY" },
+    });
     const position = await db.positionSnapshot.findFirstOrThrow({
       where: { instrumentId: infosys.id },
     });
@@ -287,5 +337,36 @@ describe("portfolio snapshot ingestion", () => {
 
     // Every holding in this file is flagged, so nothing can be valued.
     expect(result.kind).toBe("insufficient-data");
+  });
+});
+
+describe("displayFileName override", () => {
+  const testDb = createTestDb();
+  const db = testDb.db;
+
+  afterAll(async () => {
+    await testDb.cleanup();
+  });
+
+  it("records the display name instead of the on-disk path's basename when supplied", async () => {
+    const audit = await importPortfolioSnapshot(db, fixture("equity-v1-base.csv"), {
+      ...EQUITY,
+      displayFileName: "My Broker Holdings.csv",
+    });
+
+    expect(audit.fileName).toBe("My Broker Holdings.csv");
+
+    const stored = await db.sourceDocument.findFirst();
+    expect(stored?.fileName).toBe("My Broker Holdings.csv");
+  });
+
+  it("falls back to the path's basename when no override is given", async () => {
+    await db.sourceDocument.deleteMany();
+    const audit = await importPortfolioSnapshot(
+      db,
+      fixture("equity-v1-base.csv"),
+      EQUITY,
+    );
+    expect(audit.fileName).toBe("equity-v1-base.csv");
   });
 });
