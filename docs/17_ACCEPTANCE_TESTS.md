@@ -15,7 +15,7 @@ release-ready (`docs/FINAL_AUDIT_REPORT.md` at M12).
 7. Salary changes propagate through budget and planning calculations.
 8. The emergency fund is visibly protected from ordinary goal spending.
 9. Portfolio valuation uses dated prices/NAVs with a visible freshness
-   indicator.
+   indicator. **Built (M10)** — `/market`, `src/market/`.
 10. Net worth reconciles (assets − liabilities, trusted records only).
 11. Headline numbers drill down to their provenance.
 12. Automatic and manual backup/restore both work, including the restore

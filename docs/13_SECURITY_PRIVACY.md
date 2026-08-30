@@ -44,9 +44,11 @@ need.
 ## Data in transit
 
 - Core app: no network calls required for core financial operations.
-- Optional market data fetch and optional cloud AI provider calls happen
-  over HTTPS only, and only when explicitly configured
-  (`.env.example` — providers are opt-in, not defaulted to a cloud service).
+- Optional market data fetch (M10 — `src/market/`, AMFI's official file
+  and Yahoo Finance's unofficial endpoint, both free and unauthenticated)
+  and optional cloud AI provider calls happen over HTTPS only, and only
+  when the user clicks "Refresh market data now" — no background polling,
+  no data sent anywhere on a schedule the user didn't trigger.
 
 ## Input validation
 
