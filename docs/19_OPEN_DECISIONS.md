@@ -87,7 +87,63 @@ net-worth figure built on it would then be wrong in a way that looks
 plausible. Asset class is explicit for the same reason: guessing "equity"
 for a mutual-fund export would put units and shares in the same bucket.
 
+## Resolved by the supplied reference files (2026-08-30)
+
+### D-005: real source files — NOW SUPPLIED, closed
+The real 2026 budget workbook (two copies) and three Zerodha holdings
+statements were supplied. Both parsers were validated against their actual
+structures and both needed dedicated adapters — see
+`REFERENCE_COVERAGE_AUDIT.md` §4 for the five defects this uncovered. The
+long-standing caveat on M3 and M5 ("validated against synthetic fixtures
+only") is **lifted**.
+
+### D-010: "surplus" definition — RESOLVED by the workbook itself
+The workbook's own formulas settle it: EMIs sit in the Expenses column,
+`Investment` available `= income total − expense total`, and `Left over cash
+for the month = available − invested`. These are exactly the engine's
+`retainedMinorUnits` and `unallocatedMinorUnits`. No code change was needed;
+the engine already matched the user's model.
+
+### D-011: snapshot as-of date — AMENDED
+Originally the caller had to supply `asOf`. Zerodha statements carry their
+own date ("…Statement as on 2026-08-03"), so the file's date is now used when
+present. When a caller supplies a date that **contradicts** the file, the
+import is refused rather than silently picking one — a wrong date would
+misdate every historical valuation built on the snapshot.
+
 ## Open — genuinely unresolved, flagging rather than guessing
+
+### D-012: Does carry-over income count toward the savings rate?
+The budget workbook has income rows named "Previous month left" / "Previous
+month leftover salary" — last month's unspent cash re-entering as this
+month's income. Counting it inflates the income denominator (money is
+counted in two months); excluding it understates the cash genuinely
+available to allocate.
+**Current behaviour:** counted as income, and flagged in the Import Audit so
+it is never invisible. **Impact:** savings and investment rate denominators.
+**Needed from the user:** whether carry-over should be excluded from rate
+denominators while remaining in available cash.
+
+### D-013: Are pledged units included in "Quantity Available"?
+Zerodha reports `Quantity Available` alongside `Quantity Pledged (Margin)`
+and `(Loan)`. In all three supplied statements every pledged quantity is
+zero, so the data cannot say whether a pledged holding is inside or outside
+the Available figure.
+**Current behaviour:** `Available` is used as the quantity, and any non-zero
+pledge flags the holding `needs_review` rather than guessing.
+**Impact:** portfolio value would be understated if pledged units are
+excluded from Available. **Needed from the user:** confirmation, ideally with
+a statement in which something is pledged.
+
+### D-014: Mutual funds held outside Zerodha
+The budget plans monthly contributions to three mutual funds ("Index fund",
+"Flexi cap", "Midcap"), but the Zerodha `Mutual Funds` sheet is empty in all
+three statements — they are held elsewhere (Groww, per the specification's
+tools table). No statement for them was supplied.
+**Impact:** portfolio value and net worth exclude these holdings entirely,
+and Plan vs Reality cannot compare planned against actual for them.
+**Needed from the user:** a Groww (or equivalent) holdings export, or
+confirmation that these should be tracked by manual entry.
 
 ### D-005: No actual 2026 budget workbook file was supplied
 The controlling build plan (§29, §10) describes the real 2026 workbook as

@@ -46,6 +46,42 @@ file).
 10. **Store provenance** on every extracted record: source file, hash, sheet
     name, field reference, import timestamp, revision pointer.
 
+## Source-adapter architecture
+
+```
+SOURCE FILE → SOURCE ADAPTER → RAW/EXTRACTED RECORD → NORMALIZATION →
+VALIDATION → TRUST CLASSIFICATION → CANONICAL DOMAIN MODEL → PERSISTENCE →
+DETERMINISTIC FINANCIAL ENGINE
+```
+
+`src/ingestion/sources/` holds one adapter per real source plus **one central
+mapping registry** (`mappings.ts`) carrying every column alias, section
+label, derived-row marker, sheet-skip rule, and validation threshold.
+Nothing source-specific lives anywhere else, and none of it reaches the
+financial engine — adapters emit the same canonical `ExtractedRow` /
+`ExtractedPosition` regardless of origin.
+
+| Adapter | Source | Reference |
+|---|---|---|
+| `budgetWorkbook.ts` | The recurring budget workbook's real layout | R-01 |
+| `zerodhaHoldings.ts` | Zerodha holdings statements | R-02 |
+| generic paths in `normalize.ts` / `normalizeSnapshot.ts` | Simple header-in-row-1 tables and manual exports | — |
+
+Adapters are tried before the generic paths, which remain as a fallback so
+hand-made exports keep working. Adding a source means adding an adapter and
+its mappings entry — no change to normalization, persistence, or the engine.
+
+### What the real files changed
+
+Before the real files were supplied, both parsers assumed a header in row 1.
+Neither real format has one, and both would have imported **nothing**. Worse,
+two structures would have silently corrupted totals: the budget workbook's
+formula rows (`total`, `Investment`, `Left over cash`) restate the lines
+above them, and the Zerodha `Combined` sheet restates `Equity` +
+`Mutual Funds`. Importing either would have doubled real figures while
+looking entirely plausible. Full findings:
+`docs/REFERENCE_COVERAGE_AUDIT.md` §4.
+
 ## Implementation notes (M3)
 
 Implemented in `src/ingestion/`: `parseWorkbook.ts` (exceljs read),

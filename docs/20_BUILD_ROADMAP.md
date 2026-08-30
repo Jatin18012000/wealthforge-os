@@ -142,11 +142,39 @@ with the real file — that is the designed extension point.
 - [x] 138 tests pass; `pnpm typecheck`, `pnpm lint`, `pnpm build` all
       verified passing this session.
 
-Same caveat as M3: layouts are validated against synthetic fixtures, since
-no real broker export was supplied (D-005). `COLUMN_ALIASES` in
-`normalizeSnapshot.ts` is the designed adjustment point.
+**M5 is COMPLETE.**
 
-**M5 is COMPLETE.** Next milestone: **M6 — Dashboard V1** (Command Center,
-Budget, Portfolio, Goals, Liabilities) per `docs/10_DASHBOARD_SPEC.md`. The
-data model, ingestion, and engine beneath it are now all tested, which is
-the precondition the build plan set for starting UI work.
+## Reference-material pass (post-M5, pre-M6) — COMPLETE
+
+The real budget workbook (two copies) and three Zerodha holdings statements
+were supplied, closing **D-005**. Both were studied before any code changed
+(`REFERENCE_DOCUMENT_REGISTER.md`), traced through to implementation
+(`REFERENCE_MAPPING.md`), and audited for lost knowledge
+(`REFERENCE_COVERAGE_AUDIT.md`).
+
+- [x] All five files read structurally; no supplied file modified.
+- [x] Central source-adapter architecture (`src/ingestion/sources/`) with one
+      mapping registry; no source quirk reaches the financial engine.
+- [x] Budget adapter for the real positional layout.
+- [x] Zerodha adapter for the real statement layout.
+- [x] Anonymized reference-layout fixtures + 17 tests.
+- [x] M5 handoff audit: **M5 was not rebuilt**; its design held up against
+      real data and gained an adapter alongside the existing generic path.
+- [x] 155 tests pass; typecheck, lint, build clean.
+
+**Five defects found, two of which would have corrupted real figures while
+looking plausible**: the `Combined` sheet would have double-counted the
+entire portfolio, and the workbook's formula rows would have inflated every
+monthly total. Also fixed: both parsers extracted nothing from the real
+layouts, and cost basis lost paise by rounding per-unit prices before
+scaling. Details in `REFERENCE_COVERAGE_AUDIT.md` §4.
+
+Three questions the data genuinely cannot answer are open and recorded —
+**D-012** (carry-over income in rate denominators), **D-013** (pledged-unit
+semantics), **D-014** (mutual funds held outside Zerodha). None blocks M6.
+
+Next milestone: **M6 — Dashboard V1** (Command Center, Budget, Portfolio,
+Goals, Liabilities) per `docs/10_DASHBOARD_SPEC.md`. The data model,
+ingestion, and engine beneath it are tested against real structures now, not
+only synthetic ones — which is a stronger precondition than the build plan
+required for starting UI work.
