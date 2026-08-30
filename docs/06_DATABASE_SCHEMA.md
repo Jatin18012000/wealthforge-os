@@ -8,6 +8,7 @@ Prisma migration plus an ADR if the change is structural.
 `add_sheet_content_hash`, `nullable_plan_amount`).
 
 Two M3 additions to the M2 shape:
+
 - `sheet_snapshot.content_hash` — SHA-256 over the sheet's financial
   content, so idempotency is content-based rather than byte-based.
 - `plan_record.amount_minor_units` is **nullable**. A cell that cannot be
@@ -77,8 +78,8 @@ emi_amount_minor_units, created_at`
 target_amount_minor_units, target_date (nullable), priority_rank,
 lifecycle_state (planned | in_progress | achieved | on_hold | cancelled),
 created_at`
-*(current_amount is derived from `activity` rows referencing the goal, never
-stored as an independently editable column.)*
+_(current_amount is derived from `activity` rows referencing the goal, never
+stored as an independently editable column.)_
 
 **insurance_policy**
 `id, kind (health_personal | health_family | term | other), insured_party,
@@ -90,8 +91,14 @@ status, effective_from`
 reason (nullable), created_at`
 
 **manual_adjustment**
-`id, entity_type, entity_id, source_value_json, adjustment_json,
-resulting_value_json, reason (nullable), created_at`
+`id, entity_type, entity_id, field, unit (money | quantity | count | bps),
+mode (set | delta), source_value_json, adjustment_json,
+resulting_value_json, reason (nullable), created_at, revoked_at (nullable)`
+
+`field` names which value of the record is overridden; `mode` says whether
+the adjustment states an absolute value or a difference to re-apply against
+whatever the source says later. `revoked_at` withdraws an override without
+deleting it. See `docs/features/manual-controls.md` (M8).
 
 **audit_event**
 `id, kind (import | revision | manual_override | rule_change | backup |

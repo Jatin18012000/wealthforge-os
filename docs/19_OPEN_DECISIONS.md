@@ -8,12 +8,14 @@ guessing; ask.
 ## Resolved during M0
 
 ### D-001: Local persistence technology
+
 **Decision:** SQLite via Prisma. See
 `docs/decisions/0001-local-persistence.md`.
 **Why now:** Required before M2 can start; the source documents mandate this
 be decided and documented before schema freeze (source doc §8, §35 step 11).
 
 ### D-002: Repository structure — single package vs. monorepo
+
 **Decision:** Single Next.js package, not a Turborepo monorepo. See
 `docs/decisions/0002-single-package-not-monorepo.md`.
 **Why now:** The repository tree specified in the source documents (§6/§27)
@@ -22,9 +24,11 @@ is a flat single-app layout (`src/`, `tests/`, `scripts/`, `data/`), not a
 application, not a multi-app platform.
 
 ### D-003: Excel ingestion library
+
 **Decision:** `exceljs`. See `docs/decisions/0003-ingestion-library.md`.
 
 ### D-004: AI provider abstraction default
+
 **Decision:** Local model via Ollama as default provider; OpenAI/Anthropic
 as optional, swappable providers behind one interface. See
 `docs/decisions/0004-ai-provider-abstraction.md`.
@@ -39,6 +43,7 @@ local-first mandate; cloud providers remain fully supported as an opt-in.
 ## Resolved during M3
 
 ### D-009: Period attribution for bare month sheet names
+
 **Decision:** `importBudgetWorkbook` takes a required `defaultYear`
 parameter. A sheet name carrying its own year ("Aug-26", "August 2027",
 "2026-08") overrides it; a bare name ("August") uses it.
@@ -54,9 +59,11 @@ carry years. If they do, `defaultYear` becomes a fallback that never fires.
 ## Resolved during M4
 
 ### D-010: What "monthly surplus" includes
+
 **Decision:** the engine does not publish a single figure called "surplus".
 `summarizeMonth` reports every component separately — income, expense, EMI,
 investment — plus two explicitly-named rollups:
+
 - `retained` = income − expenses − EMI (money not consumed)
 - `unallocated` = retained − investments (cash genuinely left over)
 
@@ -71,13 +78,14 @@ projections and Plan vs Reality. Exposing both costs nothing and hides
 nothing.
 
 **Open for confirmation, not blocking:** if the user thinks of "surplus" as
-one specific one of these, the dashboard can label that one as *the*
+one specific one of these, the dashboard can label that one as _the_
 headline surplus in M6. No stored data or calculation changes either way —
 only which rollup gets top billing.
 
 ## Resolved during M5
 
 ### D-011: Snapshot as-of date is a required parameter
+
 **Decision:** `importPortfolioSnapshot` takes an explicit `asOf` date and an
 explicit `assetClass`; neither is inferred from the file or the clock.
 **Why:** the same reasoning as D-009. Broker exports rarely carry a
@@ -90,6 +98,7 @@ for a mutual-fund export would put units and shares in the same bucket.
 ## Resolved by the supplied reference files (2026-08-30)
 
 ### D-005: real source files — NOW SUPPLIED, closed
+
 The real 2026 budget workbook (two copies) and three Zerodha holdings
 statements were supplied. Both parsers were validated against their actual
 structures and both needed dedicated adapters — see
@@ -98,6 +107,7 @@ long-standing caveat on M3 and M5 ("validated against synthetic fixtures
 only") is **lifted**.
 
 ### D-010: "surplus" definition — RESOLVED by the workbook itself
+
 The workbook's own formulas settle it: EMIs sit in the Expenses column,
 `Investment` available `= income total − expense total`, and `Left over cash
 for the month = available − invested`. These are exactly the engine's
@@ -105,6 +115,7 @@ for the month = available − invested`. These are exactly the engine's
 the engine already matched the user's model.
 
 ### D-011: snapshot as-of date — AMENDED
+
 Originally the caller had to supply `asOf`. Zerodha statements carry their
 own date ("…Statement as on 2026-08-03"), so the file's date is now used when
 present. When a caller supplies a date that **contradicts** the file, the
@@ -114,6 +125,7 @@ misdate every historical valuation built on the snapshot.
 ## Open — genuinely unresolved, flagging rather than guessing
 
 ### D-012: Does carry-over income count toward the savings rate?
+
 The budget workbook has income rows named "Previous month left" / "Previous
 month leftover salary" — last month's unspent cash re-entering as this
 month's income. Counting it inflates the income denominator (money is
@@ -125,6 +137,7 @@ it is never invisible. **Impact:** savings and investment rate denominators.
 denominators while remaining in available cash.
 
 ### D-013: Are pledged units included in "Quantity Available"?
+
 Zerodha reports `Quantity Available` alongside `Quantity Pledged (Margin)`
 and `(Loan)`. In all three supplied statements every pledged quantity is
 zero, so the data cannot say whether a pledged holding is inside or outside
@@ -136,6 +149,7 @@ excluded from Available. **Needed from the user:** confirmation, ideally with
 a statement in which something is pledged.
 
 ### D-014: Mutual funds held outside Zerodha
+
 The budget plans monthly contributions to three mutual funds ("Index fund",
 "Flexi cap", "Midcap"), but the Zerodha `Mutual Funds` sheet is empty in all
 three statements — they are held elsewhere (Groww, per the specification's
@@ -146,6 +160,7 @@ and Plan vs Reality cannot compare planned against actual for them.
 confirmation that these should be tracked by manual entry.
 
 ### D-005: No actual 2026 budget workbook file was supplied
+
 The controlling build plan (§29, §10) describes the real 2026 workbook as
 containing May, June, July, August, and "Core expenses" sheets, and
 instructs Claude Code to inspect that workbook (§35 step 9, §27 step 4)
@@ -167,8 +182,9 @@ figures redacted/scaled if preferred) before or during M3, so the parser can
 be validated against real structure rather than only the synthetic fixture.
 
 ### D-006: Zerodha/Kite and Groww integration timing and auth method
+
 The source documents say to prefer read-only access and never store secrets
-in source, but do not specify *when* to build these integrations or which
+in source, but do not specify _when_ to build these integrations or which
 auth flow (API key vs. OAuth-style token) to use for either. Per the source
 documents' own instruction (§21, §7), imported/manual data must remain fully
 sufficient without these integrations — they are not required for any
@@ -177,6 +193,7 @@ current milestone. Will be raised as a single question if/when M5+ work
 would otherwise require guessing an auth approach.
 
 ### D-007: Market data provider selection
+
 The source documents require tracking Nifty 50, Sensex, Nifty Bank, Nifty
 Metal with an "explicit provider + freshness policy" (source doc §7 tools
 table) but do not name a provider. **Decision deferred to M10** — will
@@ -184,9 +201,22 @@ evaluate free/self-hostable options first per project cost philosophy and
 propose one rather than guessing a paid dependency into the critical path.
 
 ### D-008: Packaging beyond `pnpm dev`/`pnpm start`
+
 Whether to eventually package as a desktop app (Tauri/Electron) for
 double-click launch is left open (`15_DEPLOYMENT_ARCHITECTURE.md`) — not
 required for v1 and not blocking any milestone.
+
+### D-015: Overriding a payer split with more than two payers
+
+`checkPayerSplitTotal`/`planPayerSplitChange` (M8) can compute the one
+companion change needed to keep a two-payer EMI split at 100% automatically.
+With three or more payers there is no single correct redistribution — the
+system refuses the override and asks the user to record the shares together
+rather than guessing which other payer absorbs the difference. No liability
+in the reference data has more than two payers, so this has not blocked
+anything. **Decision deferred** until a real liability needs it; if raised,
+the likely answer is a "record all shares at once" form rather than a
+single-field override for that case.
 
 ## Non-decisions (explicitly out of scope, not "open")
 

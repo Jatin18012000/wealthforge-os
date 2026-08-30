@@ -2,18 +2,18 @@
 
 ## Screens
 
-| Screen | Core content |
-|---|---|
-| Command Center | Net worth, cash, portfolio, liabilities, surplus, goals, alerts, data freshness |
-| Budget | Current/historical months, income/expense/investment, EMI releases, Plan vs Reality |
-| Portfolio | Stocks/ETFs/MFs/metals/EPF, P&L, allocation, concentration |
-| Goals | Emergency fund, car, marriage, third floor, PS5, and user-created buckets |
-| Liabilities | Balances, EMI, payer split, interest/tenure, projected releases |
-| Insurance | Coverage, premiums, term-insurance gap/status |
-| Analytics | Universal periods, filters, comparisons, trends |
-| Data Center | Imports, revisions, provenance, trust states, audit log, backup/restore |
-| Settings | Manual overrides, assumptions, thresholds, data sources |
-| AI Analyst | Grounded explanations, risk/deviation analysis, recommendations |
+| Screen         | Core content                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------ |
+| Command Center | Net worth, cash, portfolio, liabilities, surplus, goals, alerts, data freshness                              |
+| Budget         | Current/historical months, income/expense/investment, EMI releases, Plan vs Reality                          |
+| Portfolio      | Stocks/ETFs/MFs/metals/EPF, P&L, allocation, concentration                                                   |
+| Goals          | Emergency fund, car, marriage, third floor, PS5, and user-created buckets                                    |
+| Liabilities    | Balances, EMI, payer split, interest/tenure, projected releases                                              |
+| Insurance      | Coverage, premiums, term-insurance gap/status                                                                |
+| Analytics      | Universal periods, filters, comparisons, trends                                                              |
+| Data Center    | Imports, revisions, provenance, trust states, audit log, backup/restore                                      |
+| Settings       | Manual overrides, assumptions, thresholds, data sources — built (M8), see `docs/features/manual-controls.md` |
+| AI Analyst     | Grounded explanations, risk/deviation analysis, recommendations                                              |
 
 ## Navigation model
 

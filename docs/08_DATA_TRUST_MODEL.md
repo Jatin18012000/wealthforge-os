@@ -2,14 +2,14 @@
 
 ## Trust states
 
-| State | Meaning |
-|---|---|
-| Extracted | Machine-extracted from a source file; not yet validated |
+| State        | Meaning                                                                         |
+| ------------ | ------------------------------------------------------------------------------- |
+| Extracted    | Machine-extracted from a source file; not yet validated                         |
 | Needs Review | Failed a validation check, or ambiguous during ingestion; requires human review |
-| Validated | Passed deterministic validation checks (see below) |
-| Verified | Explicitly confirmed/trusted by the user |
-| Rejected | Excluded from trusted calculations; retained for audit, never deleted |
-| Superseded | Replaced by a later authoritative version via a Revision; original retained |
+| Validated    | Passed deterministic validation checks (see below)                              |
+| Verified     | Explicitly confirmed/trusted by the user                                        |
+| Rejected     | Excluded from trusted calculations; retained for audit, never deleted           |
+| Superseded   | Replaced by a later authoritative version via a Revision; original retained     |
 
 Headline calculations (net worth, portfolio value, budget totals, goal
 progress) include only `Validated` and `Verified` records. Records in other
@@ -47,11 +47,16 @@ state — it layers a new effective value on top. The UI shows: source value →
 manual adjustment → resulting current value. The source value remains
 queryable even after an override is applied.
 
+Built in M8: `manual_adjustment` rows layered onto source values by
+`src/data/loaders.ts`, so an override recomputes every downstream figure
+while leaving the source row untouched. Withdrawing an override restores
+the source exactly. See `docs/features/manual-controls.md`.
+
 ## Revisions vs. trust state
 
 A Revision and a trust-state change are different things: a Revision
-captures a *value* changing over time (e.g. a corrected August figure); a
-trust-state change captures *confidence* in a value changing (e.g.
+captures a _value_ changing over time (e.g. a corrected August figure); a
+trust-state change captures _confidence_ in a value changing (e.g.
 `Extracted` → `Validated` after checks pass, or `Needs Review` → `Rejected`
 after a human determines a row was garbage). Both are logged as
 `audit_event`s.
