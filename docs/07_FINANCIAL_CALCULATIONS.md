@@ -3,6 +3,24 @@
 All formulas below live exclusively in `src/domain/` (M4). No UI component,
 API route, or AI prompt computes these independently.
 
+**Implemented** (M4): `money.ts`, `dates.ts`, `result.ts`, `trust.ts`,
+`netWorth.ts`, `portfolio.ts`, `budget.ts`, `goals.ts`, `liabilities.ts`,
+`returns.ts`. The layer is framework-free and database-free — an ESLint rule
+blocks React/Next/AI imports, and database rows reach it only through
+`src/data/loaders.ts`, which maps rows to plain data and performs no
+arithmetic.
+
+## The `Computed<T>` contract
+
+Every calculation that can fail for lack of data returns
+`Computed<T> = { kind: "ok", value } | { kind: "insufficient-data", reasons }`.
+There is deliberately no default, estimate, or assume-zero path anywhere in
+the engine. Callers must handle the insufficient case explicitly, which is
+what makes "Insufficient data" reach the UI instead of a fabricated figure.
+
+Totals additionally report an `exclusions` list — every record left out and
+why — so a number is never quietly smaller than the user expects.
+
 ## Net worth
 
 ```
@@ -83,17 +101,47 @@ Goal progress distinguishes:
 
 ## CAGR / XIRR
 
-Computed only when there are at least two dated cash-flow/valuation points
-sufficient to solve the calculation meaningfully (implementation must define
-and document the minimum data requirement precisely in M4, e.g. minimum
-history length and minimum number of cash flows for XIRR convergence). If the
-requirement is not met, the engine returns `insufficient-data` — it never
-approximates using an assumed rate or a shorter/incompatible period.
+Minimum data requirements, as promised in M1 and now fixed in code
+(`src/domain/returns.ts`):
+
+**CAGR** requires a starting value greater than zero (there is no base to
+compound from otherwise), a non-negative ending value, an end date after the
+start date, and a window of at least **90 days** (`MIN_ANNUALIZATION_DAYS`).
+The 90-day floor exists because annualizing a very short window amplifies
+ordinary noise into an absurd headline — a 2% move over four days annualizes
+past 500%. That figure is arithmetically correct and financially
+meaningless, so the engine refuses it.
+
+**XIRR** requires at least two dated cash flows, at least one negative and
+one positive (without money moving both ways there is no rate to solve for),
+a span of at least 90 days, and actual convergence. Newton-Raphson runs
+first, with bisection over −99.99%…1000% as a fallback when Newton wanders
+on irregular flow patterns. If neither converges, the result is
+`insufficient-data` — never a nearby rate, never a simple return relabelled
+as an XIRR.
+
+**P&L** is computed only against a recorded cost basis. A position whose
+acquisition cost was never captured returns `insufficient-data`; inferring
+a cost from a later price would manufacture a gain or loss that no
+transaction supports.
 
 ## Rounding & currency handling
 
-- All monetary values are stored and computed as integer minor units (paise)
-  or exact decimal types. No floating-point arithmetic on money.
-- Rounding to display units (rupees) happens only at the presentation layer,
-  using consistent round-half-to-even, applied once per displayed figure —
-  never accumulated by rounding intermediate values.
+- All monetary values are stored and computed as integer minor units (paise).
+  No floating-point arithmetic on money. `sumMinorUnits` throws on a
+  non-integer input rather than truncating it silently.
+- Rounding is round-half-to-even, applied once per derived figure — never
+  accumulated by rounding intermediates. Half-to-even rather than half-up
+  because half-up biases every tie in the same direction, which compounds
+  across a year of records.
+- Where a rounded split must reconstitute a whole (an EMI divided among
+  payers), the final share absorbs the remainder so the parts sum back to
+  exactly the total.
+
+## Month arithmetic
+
+`addMonthsClamped` (`src/domain/dates.ts`) clamps the day to the target
+month's last day. The naive `setUTCMonth(m + n)` overflows: 31 August plus
+10 months yields 1 July rather than 30 June, and that single day is enough
+to flip a goal projection from "meets the target date" to "misses it". This
+was a live defect caught by the M4 test suite, not a hypothetical.
