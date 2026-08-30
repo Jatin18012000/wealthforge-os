@@ -51,6 +51,30 @@ state it keeps the assumption explicit and auditable.
 **Still to confirm against the real workbook:** whether its month sheets
 carry years. If they do, `defaultYear` becomes a fallback that never fires.
 
+## Resolved during M4
+
+### D-010: What "monthly surplus" includes
+**Decision:** the engine does not publish a single figure called "surplus".
+`summarizeMonth` reports every component separately — income, expense, EMI,
+investment — plus two explicitly-named rollups:
+- `retained` = income − expenses − EMI (money not consumed)
+- `unallocated` = retained − investments (cash genuinely left over)
+
+`savingsRate` = retained ÷ income; `investmentRate` = investments ÷ income.
+
+**Why:** `docs/07` inherited "surplus = income − total_expenses" from the
+source documents, which does not say whether EMI and investment count as
+"expenses". They are materially different questions — with the August
+fixture the two readings differ by ₹18,700 — and picking one silently would
+bake an unstated assumption into every downstream figure, including
+projections and Plan vs Reality. Exposing both costs nothing and hides
+nothing.
+
+**Open for confirmation, not blocking:** if the user thinks of "surplus" as
+one specific one of these, the dashboard can label that one as *the*
+headline surplus in M6. No stored data or calculation changes either way —
+only which rollup gets top billing.
+
 ## Open — genuinely unresolved, flagging rather than guessing
 
 ### D-005: No actual 2026 budget workbook file was supplied
