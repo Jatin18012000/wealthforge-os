@@ -118,12 +118,23 @@ model PositionSnapshot {
   quantity     Float // units/shares/grams — not currency, Float is acceptable here
   unit         String // shares | units | grams | rupees
 
+  /// Total acquisition cost of this holding, when the source reports it.
+  /// Nullable because many snapshots carry only quantity — and without a
+  /// recorded cost, P&L must report insufficient-data rather than infer a
+  /// cost from a later price (docs/07_FINANCIAL_CALCULATIONS.md, "P&L").
+  costBasisMinorUnits Int?
+
   sourceDocumentId String?
   sourceDocument   SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
   trustState       String   @default("extracted")
+  /// Points forward to the snapshot that corrects this one for the SAME
+  /// as-of date. A later date is a new observation, not a correction, and
+  /// gets its own row. Scalar pointer, as on plan_record.
+  supersededById   String?
   createdAt        DateTime @default(now())
 
   @@index([instrumentId, asOfDate])
+  @@index([supersededById])
   @@map("position_snapshot")
 }
 
@@ -155,6 +166,11 @@ model Activity {
   liability    Liability?  @relation(fields: [liabilityId], references: [id])
 
   amountMinorUnits Int
+  /// Units bought or sold, for instrument transactions. Lets an observed
+  /// position change be reconciled exactly against recorded transactions
+  /// instead of merely noting that some transaction exists. Null for
+  /// non-instrument activity (EMI payments, goal transfers).
+  quantity         Float?
   occurredOn       DateTime
 
   sourceDocumentId String?
@@ -163,6 +179,7 @@ model Activity {
   createdAt        DateTime @default(now())
 
   @@index([goalId, occurredOn])
+  @@index([instrumentId, occurredOn])
   @@index([liabilityId, occurredOn])
   @@map("activity")
 }
