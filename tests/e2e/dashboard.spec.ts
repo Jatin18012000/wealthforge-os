@@ -17,6 +17,7 @@ const SCREENS = [
   { path: "/portfolio", heading: "Portfolio" },
   { path: "/goals", heading: "Goals" },
   { path: "/liabilities", heading: "Liabilities" },
+  { path: "/analytics", heading: "Analytics" },
 ] as const;
 
 test.describe("navigation", () => {
@@ -195,5 +196,60 @@ test.describe("accessibility basics", () => {
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
     );
     expect(overflows).toBe(false);
+  });
+});
+
+test.describe("Analytics", () => {
+  test("offers every documented period", async ({ page }) => {
+    await page.goto("/analytics");
+
+    for (const label of [
+      "15 days", "30 days", "1 month", "3 months", "6 months", "9 months",
+      "12 months", "1 year", "5 years", "Year to date", "Financial year",
+      "Previous month", "Previous quarter", "Previous financial year",
+      "Since inception",
+    ]) {
+      await expect(page.getByRole("link", { name: label, exact: true })).toBeVisible();
+    }
+  });
+
+  test("compares two whole months with real variances", async ({ page }) => {
+    await page.goto("/analytics?period=previous-month");
+
+    // Both sides are whole months with data, so figures appear rather than
+    // "No data", and the change column is populated.
+    const incomeRow = page.locator("tr", { hasText: "Income" }).first();
+    await expect(incomeRow).toBeVisible();
+    await expect(page.getByText("Months counted:")).toBeVisible();
+  });
+
+  test("warns instead of pro-rating a partly covered month", async ({ page }) => {
+    await page.goto("/analytics?period=15d");
+
+    // The heart of honest range analytics: a 15-day window contains no whole
+    // month, and half a salary is a number that appears in no source.
+    await expect(page.getByText(/excluded rather than divided up/).first()).toBeVisible();
+    await expect(page.getByText("No data").first()).toBeVisible();
+  });
+
+  test("switches the comparison basis", async ({ page }) => {
+    await page.goto("/analytics?period=previous-month");
+    await page.getByRole("link", { name: "Same period last year" }).click();
+    await expect(page).toHaveURL(/compare=prior-year/);
+    await expect(page.locator('a[aria-current="true"]', { hasText: "Same period last year" })).toBeVisible();
+  });
+
+  test("degrades gracefully for a period it cannot resolve", async ({ page }) => {
+    // A custom period with no dates has no range; the screen must say so
+    // rather than inventing one.
+    await page.goto("/analytics?period=custom");
+    await expect(page.getByText("Insufficient data").first()).toBeVisible();
+  });
+
+  test("keeps planned and held sides distinct in the allocation table", async ({ page }) => {
+    await page.goto("/analytics?period=previous-month");
+    await expect(
+      page.getByText(/keeps a blank on the other side/),
+    ).toBeVisible();
   });
 });
