@@ -449,3 +449,101 @@ test.describe("Data Center", () => {
     await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
   });
 });
+
+test.describe("Market", () => {
+  test("lists every tracked index, including the one with no free source", async ({
+    page,
+  }) => {
+    await page.goto("/market");
+
+    await expect(page.getByRole("heading", { level: 1, name: "Market" })).toBeVisible();
+    for (const label of ["Nifty 50", "Sensex", "Nifty Bank", "Nifty Metal"]) {
+      await expect(page.getByRole("cell", { name: label, exact: true })).toBeVisible();
+    }
+    await expect(page.getByText("no free source found (D-016)")).toBeVisible();
+  });
+
+  test("shows equity/ETF holdings with an editable optional live-price symbol", async ({
+    page,
+  }) => {
+    await page.goto("/market");
+
+    await expect(page.getByRole("heading", { name: "Equities & ETFs" })).toBeVisible();
+    const equitiesCard = page.locator(".card", { hasText: "Equities & ETFs" });
+    const firstRow = equitiesCard.locator("tbody tr").first();
+    await expect(firstRow.locator('input[name="marketSymbol"]')).toBeVisible();
+  });
+
+  test("saving a market symbol persists it without affecting the holding's stored identity", async ({
+    page,
+  }) => {
+    await page.goto("/market");
+
+    const equitiesCard = page.locator(".card", { hasText: "Equities & ETFs" });
+    const firstRow = equitiesCard.locator("tbody tr").first();
+    const holdingName = await firstRow.locator("td").first().innerText();
+    await firstRow.locator('input[name="marketSymbol"]').fill("TESTSYM.NS");
+    await firstRow.getByRole("button", { name: "Save" }).click();
+
+    await page.waitForURL(/market\?symbolSet=1/);
+    await expect(page.getByText("Symbol saved.")).toBeVisible();
+
+    const updatedRow = equitiesCard.locator("tbody tr", { hasText: holdingName }).first();
+    await expect(updatedRow.locator('input[name="marketSymbol"]')).toHaveValue(
+      "TESTSYM.NS",
+    );
+  });
+
+  test("refresh reports failures gracefully rather than crashing the screen", async ({
+    page,
+  }) => {
+    await page.goto("/market");
+
+    // This sandbox's own network policy makes every fetch fail — the exact
+    // "market data provider unavailable" case docs/18_FAILURE_MODES.md
+    // requires the app to survive rather than error out on.
+    await page.getByRole("button", { name: "Refresh market data now" }).click();
+    await page.waitForURL(/market\?refreshed=1/);
+    await expect(page.getByText("Refresh complete.")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Market" })).toBeVisible();
+  });
+
+  test("links to a printable report", async ({ page }) => {
+    await page.goto("/market");
+    await page.getByRole("link", { name: "Open the report" }).click();
+    await expect(page).toHaveURL(/\/market\/report/);
+    await expect(page.getByRole("heading", { level: 1, name: "Report" })).toBeVisible();
+  });
+
+  test("has exactly one h1 and a labelled nav", async ({ page }) => {
+    await page.goto("/market");
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+});
+
+test.describe("Market report", () => {
+  test("labels every line as Fact, Inference or Recommendation", async ({ page }) => {
+    await page.goto("/market/report");
+
+    for (const section of ["Market", "Portfolio", "Goals", "Risk"]) {
+      await expect(page.getByRole("heading", { name: section })).toBeVisible();
+    }
+    const badges = page.locator(".badge", {
+      hasText: /^(Fact|Inference|Recommendation)$/,
+    });
+    expect(await badges.count()).toBeGreaterThan(0);
+  });
+
+  test("distinguishes fact from recommendation on the concentration finding", async ({
+    page,
+  }) => {
+    await page.goto("/market/report");
+    await expect(
+      page.getByText(/makes up .*% of the priced portfolio/).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/Review whether the concentration/).first(),
+    ).toBeVisible();
+  });
+});
