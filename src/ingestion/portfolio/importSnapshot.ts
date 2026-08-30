@@ -1,13 +1,26 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { hashBuffer } from "../parseWorkbook";
+import { extractZerodhaStatement } from "../sources/zerodhaHoldings";
 import { extractSnapshot, type NormalizeOptions } from "./normalizeSnapshot";
 import { parseSnapshotFile } from "./parseSnapshot";
 import type {
   ExtractedPosition,
+  ExtractedSnapshot,
   ObservedPositionChange,
   PortfolioImportAudit,
 } from "./types";
 
-export type ImportSnapshotOptions = NormalizeOptions;
+export interface ImportSnapshotOptions extends Partial<NormalizeOptions> {
+  /**
+   * Optional when the file states its own as-of date (a Zerodha statement
+   * carries "…as on YYYY-MM-DD"). Required otherwise. When both are present
+   * and disagree, the import is refused rather than silently misdating the
+   * portfolio — see D-011.
+   */
+  readonly asOf?: Date;
+}
 
 /**
  * Imports a holdings snapshot (docs/09_INGESTION_ARCHITECTURE.md, M5).
@@ -24,8 +37,7 @@ export async function importPortfolioSnapshot(
   filePath: string,
   options: ImportSnapshotOptions,
 ): Promise<PortfolioImportAudit> {
-  const raw = await parseSnapshotFile(filePath);
-  const snapshot = extractSnapshot(raw, options);
+  const snapshot = await resolveSnapshot(filePath, options);
 
   const existingDocument = await db.sourceDocument.findUnique({
     where: { fileHash: snapshot.fileHash },
@@ -124,6 +136,59 @@ export async function importPortfolioSnapshot(
   });
 
   return audit;
+}
+
+/**
+ * Chooses a source adapter for the file and produces a canonical snapshot.
+ *
+ * Source-specific layout handling is confined to the adapters; everything
+ * below this function sees the same shape regardless of where the file came
+ * from (docs/09_INGESTION_ARCHITECTURE.md, source-adapter architecture).
+ */
+async function resolveSnapshot(
+  filePath: string,
+  options: ImportSnapshotOptions,
+): Promise<ExtractedSnapshot> {
+  const buffer = await readFile(filePath);
+  const fileHash = hashBuffer(buffer);
+  const fileName = path.basename(filePath);
+
+  const zerodha = path.extname(filePath).toLowerCase() === ".xlsx"
+    ? await extractZerodhaStatement(filePath, fileName, fileHash)
+    : null;
+
+  if (zerodha !== null) {
+    const statementDate = zerodha.asOf.getTime() === 0 ? null : zerodha.asOf;
+
+    if (statementDate === null && options.asOf === undefined) {
+      throw new Error(
+        `${fileName}: the statement carries no readable date and no asOf was supplied; refusing to guess the portfolio's date.`,
+      );
+    }
+    // Trusting one over the other silently would misdate every historical
+    // valuation built on this snapshot, so a disagreement is fatal (D-011).
+    if (
+      statementDate !== null &&
+      options.asOf !== undefined &&
+      statementDate.getTime() !== options.asOf.getTime()
+    ) {
+      throw new Error(
+        `${fileName}: the statement is dated ${statementDate.toISOString().slice(0, 10)} but ${options.asOf.toISOString().slice(0, 10)} was supplied. Refusing to import rather than misdate the portfolio.`,
+      );
+    }
+
+    return { ...zerodha, asOf: statementDate ?? (options.asOf as Date) };
+  }
+
+  // Generic tabular export: the file states no date, so the caller must.
+  if (options.asOf === undefined || options.assetClass === undefined) {
+    throw new Error(
+      `${fileName}: this layout states neither an as-of date nor an asset class, so both must be supplied explicitly.`,
+    );
+  }
+
+  const raw = await parseSnapshotFile(filePath);
+  return extractSnapshot(raw, { asOf: options.asOf, assetClass: options.assetClass });
 }
 
 async function resolveInstrument(
