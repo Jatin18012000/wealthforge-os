@@ -15,6 +15,8 @@ testing, not real financial data.
 | `2026-budget-v5-malformed.xlsx` | Text in a numeric cell, a blank row, a malformed date — validation/Needs Review path |
 | `2026-budget-v6-unexpected-sheet.xlsx` | An extra sheet matching neither month nor reference conventions |
 | `2026-budget-v7-identical-reupload.xlsx` | Content-identical to v1, freshly written — idempotent re-upload test |
+| `2026-budget-v8-conflicting-rows.xlsx` | August asserts two *different* amounts for "Groceries" — CONFLICT classification; nothing from the sheet is persisted |
+| `2026-budget-v9-duplicate-rows.xlsx` | August repeats an *identical* "Groceries" line — both copies flagged `needs_review`, neither collapsed nor double-counted |
 
 Regenerate with:
 

@@ -110,6 +110,32 @@ async function main() {
   const v7 = await buildBase();
   await v7.xlsx.writeFile(path.join(OUT_DIR, "2026-budget-v7-identical-reupload.xlsx"));
 
+  // v8: August asserts two DIFFERENT amounts for the same budget line, with
+  // nothing in the file to say which is authoritative — the CONFLICT case.
+  const v8 = await buildBase();
+  const augSheetV8 = v8.getWorksheet("August");
+  augSheetV8.addRow({
+    category: "Expense",
+    label: "Groceries",
+    amount: 9999,
+    frequency: "monthly",
+    date: null,
+  });
+  await v8.xlsx.writeFile(path.join(OUT_DIR, "2026-budget-v8-conflicting-rows.xlsx"));
+
+  // v9: August repeats an identical line (same category, label AND amount).
+  // Indistinguishable from a copy-paste slip, so both copies are flagged
+  // rather than collapsed (losing a real line) or kept (double counting).
+  const v9 = await buildBase();
+  v9.getWorksheet("August").addRow({
+    category: "Expense",
+    label: "Groceries",
+    amount: 8100,
+    frequency: "monthly",
+    date: null,
+  });
+  await v9.xlsx.writeFile(path.join(OUT_DIR, "2026-budget-v9-duplicate-rows.xlsx"));
+
   console.log("Generated budget fixtures in", OUT_DIR);
 }
 
