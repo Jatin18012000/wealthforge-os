@@ -3,7 +3,8 @@ import { safeRatio, sumMinorUnits } from "./money";
 import { insufficient, ok, type Computed } from "./result";
 import { isTrusted } from "./trust";
 
-export type GoalLifecycle = "planned" | "in_progress" | "achieved" | "on_hold" | "cancelled";
+export type GoalLifecycle =
+  "planned" | "in_progress" | "achieved" | "on_hold" | "cancelled";
 
 export interface GoalInput {
   readonly id: string;
@@ -86,7 +87,9 @@ export function computeGoalProgress(
     remainingMinorUnits: goal.targetAmountMinorUnits - currentAmountMinorUnits,
     progressRatio:
       ratio === null
-        ? insufficient<number>(`goal "${goal.name}" has a zero target; progress share is undefined`)
+        ? insufficient<number>(
+            `goal "${goal.name}" has a zero target; progress share is undefined`,
+          )
         : ok(ratio),
     contributionCount: contributions.length,
     withdrawalCount: withdrawals.length,
@@ -174,7 +177,9 @@ export function projectGoalCompletion(
   targetDate: Date | null,
 ): Computed<GoalProjection> {
   if (progress.remainingMinorUnits <= 0) {
-    return insufficient(`goal "${progress.name}" is already fully funded; no projection is needed`);
+    return insufficient(
+      `goal "${progress.name}" is already fully funded; no projection is needed`,
+    );
   }
   if (monthlyContributionMinorUnits <= 0) {
     return insufficient(
@@ -200,6 +205,42 @@ export function projectGoalCompletion(
 /** Goals in funding priority order (rank 1 first), excluding inactive ones. */
 export function activeGoalsByPriority(goals: readonly GoalInput[]): readonly GoalInput[] {
   return [...goals]
-    .filter((goal) => goal.lifecycleState === "planned" || goal.lifecycleState === "in_progress")
+    .filter(
+      (goal) =>
+        goal.lifecycleState === "planned" || goal.lifecycleState === "in_progress",
+    )
     .sort((a, b) => a.priorityRank - b.priorityRank);
+}
+
+/**
+ * Restates a goal's balance from a manual override.
+ *
+ * The derived balance is the invariant this engine defends — it is why no
+ * goal stores a current amount. An override does not repeal that: it states
+ * a different balance *alongside* the derived one, and deliberately does not
+ * fabricate contributions to explain the difference, because a transaction
+ * that never happened is exactly the kind of number this system refuses to
+ * write down. Callers keep both figures and show both.
+ */
+export function withStatedBalance(
+  progress: GoalProgress,
+  statedAmountMinorUnits: number,
+): GoalProgress {
+  const ratio = safeRatio(statedAmountMinorUnits, progress.targetAmountMinorUnits);
+
+  return {
+    ...progress,
+    currentAmountMinorUnits: statedAmountMinorUnits,
+    remainingMinorUnits: progress.targetAmountMinorUnits - statedAmountMinorUnits,
+    progressRatio:
+      ratio === null
+        ? insufficient<number>(
+            `goal "${progress.name}" has a zero target; progress share is undefined`,
+          )
+        : ok(ratio),
+    anomaly:
+      statedAmountMinorUnits < 0
+        ? `stated balance is negative (${statedAmountMinorUnits} paise)`
+        : progress.anomaly,
+  };
 }

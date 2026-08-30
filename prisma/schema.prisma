@@ -273,13 +273,30 @@ model ManualAdjustment {
   id                 String   @id @default(cuid())
   entityType         String
   entityId           String
+  /// Which field of that entity is overridden, e.g. "amount", "quantity".
+  /// Together with entityType + entityId this identifies the overridable
+  /// variable; see src/manual/registry.ts for the closed list.
+  field              String   @default("")
+  /// money | quantity | count | bps — money is never mixed with units.
+  unit               String   @default("money")
+  /// set (state the value outright) | delta (a difference re-applied to
+  /// whatever the source says today). See src/domain/adjustments.ts.
+  mode               String   @default("set")
+  /// JSON: the source value as it stood when the override was recorded, or
+  /// null where the source had none. Retained so the app can distinguish
+  /// "the import has moved since you overrode this" from "unchanged" —
+  /// docs/08_DATA_TRUST_MODEL.md, "manual overrides interact with trust".
   sourceValueJson    String
   adjustmentJson     String
   resultingValueJson String
   reason             String?
   createdAt          DateTime @default(now())
+  /// Set when the override is withdrawn. Revoked rows are retained, never
+  /// deleted: withdrawing an override is itself part of the history.
+  revokedAt          DateTime?
 
   @@index([entityType, entityId])
+  @@index([revokedAt])
   @@map("manual_adjustment")
 }
 

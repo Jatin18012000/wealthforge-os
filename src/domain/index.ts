@@ -1,4 +1,11 @@
-export { ok, insufficient, isOk, expectOk, type Computed, type Exclusion } from "./result";
+export {
+  ok,
+  insufficient,
+  isOk,
+  expectOk,
+  type Computed,
+  type Exclusion,
+} from "./result";
 export {
   rupeesToMinorUnits,
   minorUnitsToRupees,
@@ -10,7 +17,12 @@ export {
 } from "./money";
 export { isTrusted, untrustedReason, type TrustState } from "./trust";
 export { addMonthsClamped, daysInMonth } from "./dates";
-export { computeNetWorth, type AssetInput, type LiabilityInput, type NetWorth } from "./netWorth";
+export {
+  computeNetWorth,
+  type AssetInput,
+  type LiabilityInput,
+  type NetWorth,
+} from "./netWorth";
 export {
   valuePosition,
   valuePortfolio,
@@ -43,6 +55,7 @@ export {
   canWithdrawForOrdinarySpending,
   isProtectedGoal,
   activeGoalsByPriority,
+  withStatedBalance,
   type GoalInput,
   type GoalActivityInput,
   type GoalProgress,
@@ -104,3 +117,15 @@ export {
   type FilterableActivity,
   type AllocationComparisonRow,
 } from "./analytics";
+export {
+  adjustmentKey,
+  effectiveAdjustments,
+  resolveEffectiveValue,
+  applyAdjustment,
+  previewAdjustment,
+  type AdjustmentInput,
+  type AdjustmentMode,
+  type AdjustmentPreview,
+  type AdjustmentUnit,
+  type EffectiveValue,
+} from "./adjustments";
