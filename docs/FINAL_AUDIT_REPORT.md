@@ -190,16 +190,16 @@ No reference material was left unread or silently overridden.
 
 ## Zero-cost verification (docs/27)
 
-| Dependency | Mandatory? | Cost |
-|---|---|---|
-| Next.js, React, TypeScript, Prisma, Vitest, Playwright, exceljs | Yes | ₹0 (open source) |
-| SQLite (`data/wealthforge.db`) | Yes | ₹0 (local file) |
-| Local filesystem (uploads, backups) | Yes | ₹0 |
-| Ollama (default AI provider) | No — optional feature | ₹0, no key |
-| AMFI `NAVAll.txt` | No — optional feature | ₹0, no key |
-| Yahoo Finance unofficial endpoint | No — optional feature | ₹0, no key |
-| OpenAI / Anthropic | No — opt-in only | Paid, but never selected by default and the app runs fully without either |
-| Hosting | N/A — runs on the user's own machine | ₹0 |
+| Dependency                                                      | Mandatory?                           | Cost                                                                      |
+| --------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------- |
+| Next.js, React, TypeScript, Prisma, Vitest, Playwright, exceljs | Yes                                  | ₹0 (open source)                                                          |
+| SQLite (`data/wealthforge.db`)                                  | Yes                                  | ₹0 (local file)                                                           |
+| Local filesystem (uploads, backups)                             | Yes                                  | ₹0                                                                        |
+| Ollama (default AI provider)                                    | No — optional feature                | ₹0, no key                                                                |
+| AMFI `NAVAll.txt`                                               | No — optional feature                | ₹0, no key                                                                |
+| Yahoo Finance unofficial endpoint                               | No — optional feature                | ₹0, no key                                                                |
+| OpenAI / Anthropic                                              | No — opt-in only                     | Paid, but never selected by default and the app runs fully without either |
+| Hosting                                                         | N/A — runs on the user's own machine | ₹0                                                                        |
 
 **Mandatory software cost: ₹0. Mandatory API cost: ₹0. Mandatory database
 cost: ₹0. Mandatory hosting cost: ₹0. Mandatory storage cost: ₹0.
