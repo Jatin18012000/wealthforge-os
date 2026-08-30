@@ -4,7 +4,17 @@ Storage: SQLite, accessed via Prisma (`docs/decisions/0001-local-persistence.md`
 Schema is frozen for M2 at the shape below; changes after M2 go through a
 Prisma migration plus an ADR if the change is structural.
 
-**Implemented** in `prisma/schema.prisma` (migration `20260830104125_init`).
+**Implemented** in `prisma/schema.prisma` (migrations `init`,
+`add_sheet_content_hash`, `nullable_plan_amount`).
+
+Two M3 additions to the M2 shape:
+- `sheet_snapshot.content_hash` — SHA-256 over the sheet's financial
+  content, so idempotency is content-based rather than byte-based.
+- `plan_record.amount_minor_units` is **nullable**. A cell that cannot be
+  parsed as an amount (e.g. "TBD") stores NULL, never 0 — "no extractable
+  value" and "zero rupees" are different financial claims, and conflating
+  them would silently understate a budget total.
+
 Two SQLite-specific deviations from a naive reading of this doc, both noted
 inline in the schema file itself: no native enum type (documented enum
 fields are `String`, validated at the application boundary against the

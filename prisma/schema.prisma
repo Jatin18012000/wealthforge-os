@@ -46,12 +46,18 @@ model SheetSnapshot {
   sheetName        String
   sheetKind        String // month | reference | unrecognized
   classification   String // new | modified | unchanged | deleted_renamed | conflict
+  /// SHA-256 over the sheet's financial content (ordered cell values keyed
+  /// by header), excluding row numbers and cell refs. Two uploads of the
+  /// same content produce the same hash, so idempotency is content-based
+  /// rather than byte-based. Empty for deleted_renamed (no content).
+  contentHash      String   @default("")
   rawDataJson      String
   importedAt       DateTime @default(now())
 
   planRecords PlanRecord[]
 
   @@index([sourceDocumentId])
+  @@index([sheetName, importedAt])
   @@map("sheet_snapshot")
 }
 
@@ -63,7 +69,12 @@ model PlanRecord {
   category         String // income | expense | investment | emi
   labelRaw         String
   labelNormalized  String
-  amountMinorUnits Int
+  /// Nullable on purpose: a cell that could not be parsed as an amount
+  /// (e.g. "TBD") stores NULL, never 0 — "no extractable value" and "zero
+  /// rupees" are different financial claims and must never be conflated.
+  /// Such a record carries trustState = needs_review and is excluded from
+  /// every headline total until a human resolves it.
+  amountMinorUnits Int?
   currency         String   @default("INR")
 
   sourceDocumentId String?
