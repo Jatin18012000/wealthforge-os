@@ -1,4 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
+import {
+  applyAdjustment,
+  adjustmentKey,
+  type AdjustmentInput,
+} from "../domain/adjustments";
+import { loadEffectiveAdjustments } from "./adjustmentStore";
 import type {
   ActivityInput,
   GoalActivityInput,
@@ -18,7 +24,36 @@ import type {
  * independently-testable calculation library (CLAUDE.md §3). It performs
  * mapping and validation of the string columns SQLite forces on us — it
  * contains no financial arithmetic of its own.
+ *
+ * It is also where manual adjustments are layered onto source values, so
+ * that every screen and every calculation downstream sees the *effective*
+ * figure without knowing overrides exist. An override therefore recomputes
+ * net worth, budgets, goals and analytics for free, which is what
+ * docs/04_USER_FLOWS.md means by "downstream calculations recompute".
+ * The source row itself is never modified — see src/domain/adjustments.ts.
  */
+
+/**
+ * Applies the adjustment in force for one field, if any.
+ *
+ * Where an override cannot be applied (a difference recorded against a
+ * source that has since lost its value), the source value stands unchanged
+ * and the Settings screen reports the problem — a loader is the wrong place
+ * to resolve a contradiction, and inventing a figure to paper over one is
+ * never an option.
+ */
+function adjusted(
+  adjustments: Map<string, AdjustmentInput>,
+  entityType: string,
+  entityId: string,
+  field: string,
+  sourceValue: number | null,
+): number | null {
+  return applyAdjustment(
+    sourceValue,
+    adjustments.get(adjustmentKey(entityType, entityId, field)),
+  ).value;
+}
 
 const PLAN_CATEGORIES = new Set<PlanCategory>(["income", "expense", "investment", "emi"]);
 const GOAL_LIFECYCLES = new Set<GoalLifecycle>([
@@ -58,27 +93,40 @@ export async function loadEffectivePlanRecords(
   periodMonth?: string,
 ): Promise<PlanRecordInput[]> {
   const rows = await db.planRecord.findMany({
-    where: periodMonth === undefined ? { supersededById: null } : { periodMonth, supersededById: null },
+    where:
+      periodMonth === undefined
+        ? { supersededById: null }
+        : { periodMonth, supersededById: null },
   });
+  const adjustments = await loadEffectiveAdjustments(db, "plan_record");
 
   return rows.map((row) => ({
     id: row.id,
     periodMonth: row.periodMonth,
     category: assertPlanCategory(row.category, row.id),
     labelRaw: row.labelRaw,
-    amountMinorUnits: row.amountMinorUnits,
+    amountMinorUnits: adjusted(
+      adjustments,
+      "plan_record",
+      row.id,
+      "amount",
+      row.amountMinorUnits,
+    ),
     trustState: row.trustState,
   }));
 }
 
 export async function loadGoals(db: PrismaClient): Promise<GoalInput[]> {
   const rows = await db.goal.findMany({ orderBy: { priorityRank: "asc" } });
+  const adjustments = await loadEffectiveAdjustments(db, "goal");
 
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
     kind: row.kind,
-    targetAmountMinorUnits: row.targetAmountMinorUnits,
+    targetAmountMinorUnits:
+      adjusted(adjustments, "goal", row.id, "targetAmount", row.targetAmountMinorUnits) ??
+      row.targetAmountMinorUnits,
     targetDate: row.targetDate,
     priorityRank: row.priorityRank,
     lifecycleState: assertGoalLifecycle(row.lifecycleState, row.id),
@@ -87,7 +135,10 @@ export async function loadGoals(db: PrismaClient): Promise<GoalInput[]> {
 
 export async function loadGoalActivities(db: PrismaClient): Promise<GoalActivityInput[]> {
   const rows = await db.activity.findMany({
-    where: { kind: { in: ["goal_contribution", "goal_withdrawal"] }, goalId: { not: null } },
+    where: {
+      kind: { in: ["goal_contribution", "goal_withdrawal"] },
+      goalId: { not: null },
+    },
   });
 
   return rows.map((row) => ({
@@ -114,18 +165,37 @@ export async function loadActivities(db: PrismaClient): Promise<ActivityInput[]>
 
 export async function loadLiabilities(db: PrismaClient): Promise<LiabilityDetail[]> {
   const rows = await db.liability.findMany({ include: { payerSplits: true } });
+  const adjustments = await loadEffectiveAdjustments(db);
 
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
-    outstandingMinorUnits: row.outstandingMinorUnits,
+    outstandingMinorUnits:
+      adjusted(
+        adjustments,
+        "liability",
+        row.id,
+        "outstanding",
+        row.outstandingMinorUnits,
+      ) ?? row.outstandingMinorUnits,
     outstandingAsOf: row.outstandingAsOf,
-    emiAmountMinorUnits: row.emiAmountMinorUnits,
-    tenureMonths: row.tenureMonths,
+    emiAmountMinorUnits:
+      adjusted(adjustments, "liability", row.id, "emiAmount", row.emiAmountMinorUnits) ??
+      row.emiAmountMinorUnits,
+    tenureMonths:
+      adjusted(adjustments, "liability", row.id, "tenureMonths", row.tenureMonths) ??
+      row.tenureMonths,
     interestRateBps: row.interestRateBps,
     payerSplits: row.payerSplits.map((split) => ({
       payerName: split.payerName,
-      shareBps: split.shareBps,
+      shareBps:
+        adjusted(
+          adjustments,
+          "liability_payer_split",
+          split.id,
+          "shareBps",
+          split.shareBps,
+        ) ?? split.shareBps,
       effectiveFrom: split.effectiveFrom,
     })),
   }));
@@ -135,7 +205,10 @@ export async function loadLiabilities(db: PrismaClient): Promise<LiabilityDetail
  * The latest position snapshot per instrument at or before `asOf`.
  * A later snapshot is never used to describe an earlier date.
  */
-export async function loadPositionsAsOf(db: PrismaClient, asOf: Date): Promise<PositionInput[]> {
+export async function loadPositionsAsOf(
+  db: PrismaClient,
+  asOf: Date,
+): Promise<PositionInput[]> {
   const rows = await db.positionSnapshot.findMany({
     where: { asOfDate: { lte: asOf } },
     orderBy: { asOfDate: "desc" },
@@ -144,21 +217,83 @@ export async function loadPositionsAsOf(db: PrismaClient, asOf: Date): Promise<P
 
   const latestByInstrument = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
-    if (!latestByInstrument.has(row.instrumentId)) latestByInstrument.set(row.instrumentId, row);
+    if (!latestByInstrument.has(row.instrumentId))
+      latestByInstrument.set(row.instrumentId, row);
   }
+  const adjustments = await loadEffectiveAdjustments(db, "position_snapshot");
 
   return [...latestByInstrument.values()].map((row) => ({
     id: row.id,
     instrumentId: row.instrumentId,
     instrumentLabel: row.instrument.displayName,
     assetClass: row.instrument.kind,
-    quantity: row.quantity,
+    quantity:
+      adjusted(adjustments, "position_snapshot", row.id, "quantity", row.quantity) ??
+      row.quantity,
     asOfDate: row.asOfDate,
     trustState: row.trustState,
   }));
 }
 
-export async function loadValuations(db: PrismaClient, asOf: Date): Promise<ValuationInput[]> {
+/**
+ * Cost basis per instrument, from the latest effective snapshot at or before
+ * `asOf`, with any manual correction applied.
+ *
+ * Null where no cost was ever recorded: profit and loss must then report
+ * insufficient data rather than infer a purchase price from a later
+ * valuation (docs/07_FINANCIAL_CALCULATIONS.md, "P&L").
+ */
+export async function loadCostBasesAsOf(
+  db: PrismaClient,
+  asOf: Date,
+): Promise<Map<string, number | null>> {
+  const rows = await db.positionSnapshot.findMany({
+    where: { asOfDate: { lte: asOf }, supersededById: null },
+    orderBy: { asOfDate: "desc" },
+    select: { id: true, instrumentId: true, costBasisMinorUnits: true },
+  });
+  const adjustments = await loadEffectiveAdjustments(db, "position_snapshot");
+
+  const byInstrument = new Map<string, number | null>();
+  for (const row of rows) {
+    if (byInstrument.has(row.instrumentId)) continue;
+    byInstrument.set(
+      row.instrumentId,
+      adjusted(
+        adjustments,
+        "position_snapshot",
+        row.id,
+        "costBasis",
+        row.costBasisMinorUnits,
+      ),
+    );
+  }
+  return byInstrument;
+}
+
+/**
+ * Overrides on goal balances, keyed by goal id.
+ *
+ * A goal's balance is derived from its activity history, so there is no
+ * stored figure for a loader to adjust — the goals view applies these to the
+ * derived progress instead, keeping both the derived and the stated balance
+ * visible rather than replacing one with the other.
+ */
+export async function loadGoalBalanceAdjustments(
+  db: PrismaClient,
+): Promise<Map<string, AdjustmentInput>> {
+  const adjustments = await loadEffectiveAdjustments(db, "goal");
+  const byGoal = new Map<string, AdjustmentInput>();
+  for (const adjustment of adjustments.values()) {
+    if (adjustment.field === "currentAmount") byGoal.set(adjustment.entityId, adjustment);
+  }
+  return byGoal;
+}
+
+export async function loadValuations(
+  db: PrismaClient,
+  asOf: Date,
+): Promise<ValuationInput[]> {
   const rows = await db.valuation.findMany({ where: { asOfDate: { lte: asOf } } });
 
   return rows.map((row) => ({

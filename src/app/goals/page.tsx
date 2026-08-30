@@ -15,7 +15,7 @@ const LIFECYCLE_LABELS: Record<string, string> = {
 };
 
 function GoalPanel({ card }: { card: GoalCard }) {
-  const { goal, progress, projection } = card;
+  const { goal, progress, projection, effectiveBalance } = card;
 
   return (
     <Card>
@@ -79,6 +79,22 @@ function GoalPanel({ card }: { card: GoalCard }) {
                 </Computed$>
               </td>
             </tr>
+            {effectiveBalance !== null && (
+              <tr>
+                <td>Balance stated by hand</td>
+                <td className="num">
+                  {formatMoney(effectiveBalance.currentValue)}
+                  <br />
+                  <span className="note">
+                    {formatMoney(effectiveBalance.sourceValue ?? 0)} derived from
+                    contributions
+                    {effectiveBalance.reason === null
+                      ? ""
+                      : ` · ${effectiveBalance.reason}`}
+                  </span>
+                </td>
+              </tr>
+            )}
             <tr>
               <td>Funding history</td>
               <td className="num">
@@ -94,7 +110,8 @@ function GoalPanel({ card }: { card: GoalCard }) {
                       {formatDate(value.projectedCompletion)}
                       <br />
                       <span className="note">
-                        {value.monthsToTarget} month{value.monthsToTarget === 1 ? "" : "s"}
+                        {value.monthsToTarget} month
+                        {value.monthsToTarget === 1 ? "" : "s"}
                         {value.missesTargetDate ? " · misses target date" : ""}
                       </span>
                     </>

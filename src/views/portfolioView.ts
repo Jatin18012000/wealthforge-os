@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { loadPositionsAsOf, loadValuations } from "../data/loaders";
+import { loadCostBasesAsOf, loadPositionsAsOf, loadValuations } from "../data/loaders";
 import {
   allocationByAssetClass,
   computeProfitAndLoss,
@@ -69,19 +69,10 @@ export async function getPortfolioView(
     };
   }
 
-  // Cost basis comes from the snapshot the position was read from, so P&L is
-  // computed per holding and reports insufficient-data where no cost was
-  // ever recorded rather than inferring one.
-  const costBases = new Map<string, number | null>();
-  for (const snapshot of await db.positionSnapshot.findMany({
-    where: { asOfDate: { lte: asOf }, supersededById: null },
-    orderBy: { asOfDate: "desc" },
-    select: { instrumentId: true, costBasisMinorUnits: true },
-  })) {
-    if (!costBases.has(snapshot.instrumentId)) {
-      costBases.set(snapshot.instrumentId, snapshot.costBasisMinorUnits);
-    }
-  }
+  // Cost basis comes from the snapshot the position was read from (with any
+  // manual correction applied), so P&L is computed per holding and reports
+  // insufficient-data where no cost was ever recorded rather than inferring one.
+  const costBases = await loadCostBasesAsOf(db, asOf);
 
   const holdings: HoldingRow[] = valuation.value.positions.map((position) => ({
     instrumentLabel: position.instrumentLabel,

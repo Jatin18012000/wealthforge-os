@@ -1,10 +1,17 @@
 import type { PrismaClient } from "@prisma/client";
-import { loadGoalActivities, loadGoals } from "../data/loaders";
+import {
+  loadGoalActivities,
+  loadGoalBalanceAdjustments,
+  loadGoals,
+} from "../data/loaders";
 import {
   activeGoalsByPriority,
   computeGoalProgress,
   projectGoalCompletion,
+  resolveEffectiveValue,
+  withStatedBalance,
   type Computed,
+  type EffectiveValue,
   type GoalInput,
   type GoalProgress,
   type GoalProjection,
@@ -14,6 +21,13 @@ export interface GoalCard {
   readonly goal: GoalInput;
   readonly progress: GoalProgress;
   readonly projection: Computed<GoalProjection>;
+  /**
+   * Set when a manual override states this goal's balance. The balance
+   * derived from contribution history is kept in `effectiveBalance.sourceValue`
+   * and shown beside the stated one — an override adds a figure to the
+   * record, it does not erase the one it disagrees with.
+   */
+  readonly effectiveBalance: EffectiveValue | null;
 }
 
 export interface GoalsView {
@@ -34,8 +48,24 @@ export async function getGoalsView(db: PrismaClient, asOf: Date): Promise<GoalsV
   const goals = await loadGoals(db);
   const activities = await loadGoalActivities(db);
 
+  const balanceOverrides = await loadGoalBalanceAdjustments(db);
+
   const cards: GoalCard[] = goals.map((goal) => {
-    const progress = computeGoalProgress(goal, activities);
+    const derived = computeGoalProgress(goal, activities);
+
+    // A stated balance replaces the derived figure for progress and
+    // projection, but both remain on the card.
+    const override = balanceOverrides.get(goal.id);
+    const resolved =
+      override === undefined
+        ? null
+        : resolveEffectiveValue(derived.currentAmountMinorUnits, override);
+    const effectiveBalance =
+      resolved !== null && resolved.kind === "ok" ? resolved.value : null;
+    const progress =
+      effectiveBalance === null
+        ? derived
+        : withStatedBalance(derived, effectiveBalance.currentValue);
 
     // A projection needs a contribution rate. Recent months of actual
     // contributions are the only honest basis available, and where there are
@@ -45,7 +75,13 @@ export async function getGoalsView(db: PrismaClient, asOf: Date): Promise<GoalsV
     return {
       goal,
       progress,
-      projection: projectGoalCompletion(progress, monthlyContribution, asOf, goal.targetDate),
+      projection: projectGoalCompletion(
+        progress,
+        monthlyContribution,
+        asOf,
+        goal.targetDate,
+      ),
+      effectiveBalance,
     };
   });
 
@@ -74,7 +110,12 @@ const MONTHS_CONSIDERED = 6;
  * inventing a funding rate.
  */
 function averageMonthlyContribution(
-  activities: readonly { goalId: string; kind: string; amountMinorUnits: number; occurredOn: Date }[],
+  activities: readonly {
+    goalId: string;
+    kind: string;
+    amountMinorUnits: number;
+    occurredOn: Date;
+  }[],
   goalId: string,
   asOf: Date,
 ): number {
@@ -93,7 +134,9 @@ function averageMonthlyContribution(
 
   const total = contributions.reduce((sum, a) => sum + a.amountMinorUnits, 0);
   const monthsSpanned = new Set(
-    contributions.map((a) => `${a.occurredOn.getUTCFullYear()}-${a.occurredOn.getUTCMonth()}`),
+    contributions.map(
+      (a) => `${a.occurredOn.getUTCFullYear()}-${a.occurredOn.getUTCMonth()}`,
+    ),
   ).size;
 
   return Math.floor(total / Math.max(monthsSpanned, 1));
