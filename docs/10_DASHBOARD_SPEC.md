@@ -1,10 +1,42 @@
 # 10 — Dashboard Spec
 
-Status: not yet built (M6). This doc is the target spec the M6 vertical
-slice implements; it will be expanded with exact component/layout detail
-during M6 once the domain layer (M4) and portfolio ingestion (M5) exist to
-build against. Building the UI ahead of trustworthy data is explicitly out
-of order (`00_MASTER_PLAN.md`).
+Status: **Dashboard V1 built (M6)** — Command Center, Budget, Portfolio,
+Goals and Liabilities. Analytics, Data Center, Settings and AI Analyst
+remain unbuilt and are deliberately absent from the navigation: a link to a
+screen that does nothing is a promise the app has not kept.
+
+## How the UI is wired
+
+```
+loaders (src/data)  →  domain engine (src/domain)  →  view models (src/views)
+                                                            ↓
+                                              server components (src/app)
+```
+
+Screens are React Server Components that render a view model and nothing
+else. No component performs arithmetic, divides by 100, or touches the
+database — the view layer composes loaders and the engine, and
+`src/presentation/format.ts` is the single place minor units become
+displayed rupees (`CLAUDE.md` §3).
+
+That split is what makes the screens testable where it matters: view models
+are unit-tested without a DOM (`tests/views/`), and rendering is covered by
+Playwright across laptop and iPad widths (`tests/e2e/`).
+
+## Making the engine's honesty visible
+
+The engine refuses to invent figures; the UI has to carry that through or
+the discipline is wasted. Concretely:
+
+- Every `Computed<T>` renders through one component, so an
+  insufficient-data result appears as **"Insufficient data"** with its
+  reasons — never as ₹0.
+- Any total that excluded records shows what was left out and why.
+- Prices show their date and age, and the word "live" appears nowhere.
+- Records below `validated` carry a trust badge and a tinted row.
+- Missing actuals in Plan vs Reality read **"No data"**, not zero.
+- Position changes no transaction explains are raised on the Command
+  Center, not buried in the audit log.
 
 ## Design priority
 

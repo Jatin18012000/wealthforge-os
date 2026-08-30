@@ -12,7 +12,7 @@ passing in an actual session (tests run, not assumed).
 | M3 | Budget ingestion vertical slice | COMPLETE | `src/ingestion/`: exceljs parser, sheet classifier, normalization/validation, content-hash diff engine, import orchestrator with revisions and Import Audit | 25 ingestion tests (12 unit + 13 fixture-based integration) covering all 5 classifications, idempotency, corrected month, rename, deletion, malformed cells, unexpected sheet, conflict, duplicates | pnpm typecheck/lint/test/build all passed clean this session | One real bug found by the test suite and fixed: a renamed sheet was treated as a new period and duplicated every line of that month, double-counting it in all totals. Parser is validated against synthetic fixtures only — D-005 still open, real workbook needed to confirm column/label conventions. | D-005 (final validation), D-009 (resolved) | (pending commit) | 2026-08-30 |
 | M4 | Deterministic financial engine | COMPLETE | `src/domain/`: money/dates primitives, `Computed<T>` insufficiency contract, trust filtering, net worth, portfolio valuation + allocation + concentration, budget summary + Plan vs Reality, goals + projections + allocation guards, EMI payer split + burden + release, CAGR/XIRR/P&L. `src/data/loaders.ts` keeps the domain database-free | 89 domain tests + 4 end-to-end (workbook → engine) — 122 across the suite | pnpm typecheck/lint/test/build all passed clean this session | One real bug found by the test suite and fixed: `setUTCMonth` month-end overflow made 31 Aug + 10 months land on 1 July instead of 30 June, which could flip a goal's "misses target date" verdict. Fixed with `addMonthsClamped`, applied to both goal and EMI projections. | D-010 (resolved) | (pending commit) | 2026-08-30 |
 | M5 | Portfolio ingestion | COMPLETE | `src/ingestion/portfolio/`: RFC 4180 CSV reader + XLSX path, column alias tolerance, instrument resolution, snapshot revisions, observed-change detection with transaction reconciliation, Portfolio Import Audit. Schema: position cost basis + supersede pointer, activity quantity | 16 snapshot tests over 9 fixtures, including a slice proving imported data flows into the M4 valuation engine — 138 across the suite | pnpm typecheck/lint/test/build all passed clean this session | One real bug found by the test suite and fixed: two duplicate rows within one file were treated as a correction, so the second silently superseded the first — dropping a real lot, the exact loss the duplicate flagging exists to prevent. Corrections are now cross-import only. Column layouts validated against synthetic fixtures only; real broker exports still needed (D-005). | D-011 (resolved); D-006 still deferred and not blocking | (pending commit) | 2026-08-30 |
-| M6 | Dashboard V1 | NOT STARTED | Command Center, Budget, Portfolio, Goals, Liabilities screens | Visual + E2E | Pending | — | — | — | — |
+| M6 | Dashboard V1 | COMPLETE | `src/presentation` formatters, `src/views` view models, `src/components` primitives, five App Router screens, demo seed that ingests the reference fixtures through the real pipeline | 23 view/format tests + 46 Playwright E2E across laptop and iPad — 178 unit/integration total | pnpm typecheck/lint/test/build/e2e all passed; all five screens screenshotted and inspected | Two real defects found and fixed: a malformed period rendered the literal string "Invalid Date", and unexplained position changes never reached the UI. One a11y issue fixed: period chips duplicated `aria-current="page"` with the sidebar. | D-005 closed earlier; no new blockers | (pending commit) | 2026-08-30 |
 | M7 | Analytics | NOT STARTED | Periods, filters, Plan vs Reality | Range/insufficient-data tests | Pending | — | — | — | — |
 | M8 | Manual controls | NOT STARTED | Overrides across all domains | Audit/recalculation tests | Pending | — | — | — | — |
 | M9 | Data Center | NOT STARTED | Backup/restore/import/export/audit UI | Recovery drill | Pending | — | — | — | — |
@@ -173,8 +173,34 @@ Three questions the data genuinely cannot answer are open and recorded —
 **D-012** (carry-over income in rate denominators), **D-013** (pledged-unit
 semantics), **D-014** (mutual funds held outside Zerodha). None blocks M6.
 
-Next milestone: **M6 — Dashboard V1** (Command Center, Budget, Portfolio,
-Goals, Liabilities) per `docs/10_DASHBOARD_SPEC.md`. The data model,
-ingestion, and engine beneath it are tested against real structures now, not
-only synthetic ones — which is a stronger precondition than the build plan
-required for starting UI work.
+## M6 exit gate (from source build plan §19)
+
+"Visual + E2E pass." Tracked here explicitly:
+
+- [x] Command Center, Budget, Portfolio, Goals and Liabilities built.
+- [x] No arithmetic in any component: screens render view models, which
+      compose loaders and the engine. `src/presentation/format.ts` is the
+      only place minor units become rupees.
+- [x] The engine's honesty reaches the screen — insufficient-data renders as
+      an explained absence rather than ₹0, totals name their exclusions,
+      prices show age and never read "live", untrusted records are badged,
+      missing actuals read "No data", and unexplained position changes are
+      raised on the Command Center.
+- [x] **Visual pass**: all five screens rendered and inspected at 1440px,
+      plus the Command Center at iPad width. Figures reconcile against the
+      workbook's own formulas (retained ₹25,223, left over cash ₹5,723) and
+      allocation shares sum to 100%.
+- [x] **E2E pass**: 46 Playwright tests across laptop and iPad viewports,
+      including keyboard navigation, one `h1` per screen, a labelled nav,
+      and no horizontal scroll at iPad width.
+- [x] 178 unit/integration tests pass; typecheck, lint and build clean.
+
+Two real defects the tests caught and fixed: a malformed period rendered the
+literal string "Invalid Date" on screen, and unexplained position changes —
+which ingestion deliberately refuses to turn into trades — never surfaced in
+the UI, leaving that refusal buried in the audit log. Plus one accessibility
+fix: the Budget period chips claimed `aria-current="page"` alongside the
+sidebar link, so two elements asserted they were the current page.
+
+**M6 is COMPLETE.** Next milestone: **M7 — Analytics** (universal periods,
+filters, Plan vs Reality, comparisons) per `docs/11_ANALYTICS_SPEC.md`.
