@@ -358,6 +358,12 @@ test.describe("Settings — manual controls", () => {
     await expect(page.getByText("Insufficient data").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Confirm override" })).toHaveCount(0);
   });
+
+  test("has exactly one h1 and a labelled nav", async ({ page }) => {
+    await page.goto("/settings");
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
 });
 
 test.describe("Data Center", () => {

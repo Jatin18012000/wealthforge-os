@@ -9,8 +9,12 @@ deterministic financial engine (net worth, P&L, allocation, EMI, goal
 funding), and provides an AI analyst layer that explains — but never
 invents — the numbers.
 
-Status: **M0 — Repository & governance** (see
-[`docs/20_BUILD_ROADMAP.md`](docs/20_BUILD_ROADMAP.md)).
+Status: **M0–M11 complete, M12 (release hardening) in progress** (see
+[`docs/20_BUILD_ROADMAP.md`](docs/20_BUILD_ROADMAP.md)). All ten screens —
+Command Center, Budget, Portfolio, Goals, Liabilities, Analytics, Settings,
+Data Center, Market, and AI Analyst — are built against the real ingestion
+and financial engine, with 370+ unit/integration tests and 90+ Playwright
+E2E tests across laptop and iPad.
 
 ## Why this exists
 
@@ -18,10 +22,10 @@ See [`docs/01_PRODUCT_VISION.md`](docs/01_PRODUCT_VISION.md) and
 [`docs/02_REQUIREMENTS.md`](docs/02_REQUIREMENTS.md) for the full product
 rationale. In short:
 
-- *What do I own, owe, and have available right now?*
-- *What did I plan versus what actually happened?*
-- *Am I on track for my funding goals, in priority order?*
-- *What changed, why, and what — if anything — should I consider doing?*
+- _What do I own, owe, and have available right now?_
+- _What did I plan versus what actually happened?_
+- _Am I on track for my funding goals, in priority order?_
+- _What changed, why, and what — if anything — should I consider doing?_
 
 ## Architecture at a glance
 
@@ -37,8 +41,15 @@ PLAN → POSITION → ACTIVITY → DETERMINISTIC ENGINE → ANALYTICS → DASHBO
   [`docs/09_INGESTION_ARCHITECTURE.md`](docs/09_INGESTION_ARCHITECTURE.md)).
 - **Domain layer:** framework-free deterministic financial engine
   (`src/domain/`).
-- **AI layer:** provider-abstracted explanatory layer only; never a source of
-  truth (see [`docs/12_AI_ANALYST_SPEC.md`](docs/12_AI_ANALYST_SPEC.md)).
+- **AI layer:** provider-abstracted explanatory layer only, grounded against
+  already-computed figures and rejected outright if it states one that
+  isn't — never a source of truth (see
+  [`docs/12_AI_ANALYST_SPEC.md`](docs/12_AI_ANALYST_SPEC.md),
+  [`docs/features/ai-analyst.md`](docs/features/ai-analyst.md)). Defaults to
+  local Ollama — no API key, no cost.
+- **Market data:** optional, free (AMFI's official NAV file + Yahoo
+  Finance's free endpoint), never required — see
+  [`docs/MARKET_DATA_PROVIDER_EVALUATION.md`](docs/MARKET_DATA_PROVIDER_EVALUATION.md).
 
 Full architecture decisions: [`docs/decisions/`](docs/decisions/). Anything
 still open: [`docs/19_OPEN_DECISIONS.md`](docs/19_OPEN_DECISIONS.md).
