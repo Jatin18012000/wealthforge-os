@@ -61,11 +61,12 @@ Nothing source-specific lives anywhere else, and none of it reaches the
 financial engine — adapters emit the same canonical `ExtractedRow` /
 `ExtractedPosition` regardless of origin.
 
-| Adapter | Source | Reference |
-|---|---|---|
-| `budgetWorkbook.ts` | The recurring budget workbook's real layout | R-01 |
-| `zerodhaHoldings.ts` | Zerodha holdings statements | R-02 |
-| generic paths in `normalize.ts` / `normalizeSnapshot.ts` | Simple header-in-row-1 tables and manual exports | — |
+| Adapter                                                  | Source                                                                                                            | Reference |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------- |
+| `budgetWorkbook.ts`                                      | The recurring budget workbook's real layout                                                                       | R-01      |
+| `zerodhaHoldings.ts`                                     | Zerodha holdings statements                                                                                       | R-02      |
+| generic paths in `normalize.ts` / `normalizeSnapshot.ts` | Simple header-in-row-1 tables and manual exports                                                                  | —         |
+| `src/app/data-center/` (M9)                              | Runs `importBudgetWorkbook`/`importPortfolioSnapshot` from a browser upload, via `src/ingestion/uploadStorage.ts` | —         |
 
 Adapters are tried before the generic paths, which remain as a fallback so
 hand-made exports keep working. Adding a source means adding an adapter and
@@ -109,7 +110,7 @@ Decisions made while implementing, each chosen to avoid guessing at money:
   "zero rupees" are different claims. The `plan_record.amountMinorUnits`
   column is nullable for exactly this reason.
 - **Reconciliation is keyed on the period, not on sheet novelty.** A renamed
-  sheet is a *new sheet* covering an *existing period*; an earlier version
+  sheet is a _new sheet_ covering an _existing period_; an earlier version
   skipped reconciliation for new sheets and duplicated every line of the
   renamed month, double-counting it in every total. Caught by
   `tests/ingestion/importWorkbook.test.ts`.
@@ -146,7 +147,7 @@ distinction drives the whole design:
   the delta, it is surfaced as unexplained for a human — the system never
   fabricates a buy or sell to make the numbers agree
   (`01_PRODUCT_VISION.md`, "Observed change ≠ confirmed transaction").
-  Reconciliation is claimed only when *every* transaction in the window
+  Reconciliation is claimed only when _every_ transaction in the window
   carries a quantity; otherwise the result is "cannot say", not "reconciled".
 
 Other decisions, consistent with budget ingestion:
@@ -159,7 +160,7 @@ Other decisions, consistent with budget ingestion:
 - **A duplicated holding within one file is flagged, not resolved.** Summing
   double-counts a duplicated export line; keeping one drops a genuine second
   lot. Both copies are written as separate `needs_review` snapshots. An
-  early version treated the second row as a *correction* of the first,
+  early version treated the second row as a _correction_ of the first,
   silently superseding it — precisely the data loss the flagging exists to
   prevent. Corrections are cross-import only; within one file a repeat is an
   ambiguity (`importSnapshot.ts`, `writtenThisRun`).

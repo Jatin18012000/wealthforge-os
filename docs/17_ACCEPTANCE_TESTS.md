@@ -5,7 +5,7 @@ documents. Each must have a corresponding automated test (or, where
 inherently manual, a documented verification step) before v1 is declared
 release-ready (`docs/FINAL_AUDIT_REPORT.md` at M12).
 
-1. Upload the recurring workbook and receive an Import Audit.
+1. Upload the recurring workbook and receive an Import Audit. **Built (M9)** — `/data-center`, `tests/e2e/dashboard.spec.ts` "Data Center" suite.
 2. Historical months remain queryable after later corrections.
 3. Corrections preserve prior versions (nothing is destructively overwritten).
 4. Any supported analytics period can be compared with an explicit coverage
@@ -19,7 +19,8 @@ release-ready (`docs/FINAL_AUDIT_REPORT.md` at M12).
 10. Net worth reconciles (assets − liabilities, trusted records only).
 11. Headline numbers drill down to their provenance.
 12. Automatic and manual backup/restore both work, including the restore
-    safety sequence in `16_DATA_MIGRATION.md`.
+    safety sequence in `16_DATA_MIGRATION.md`. **Built (M9)** —
+    `src/backup/autoBackup.ts`, `/data-center`.
 13. The core app works fully without a hosted/cloud database.
 14. The system makes no unsupported financial claims — `insufficient-data`
     is returned rather than a fabricated or approximated figure whenever the

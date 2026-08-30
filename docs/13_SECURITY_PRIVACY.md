@@ -24,9 +24,12 @@ need.
 
 - Uploaded workbook files are validated before parsing (file type, size
   limits) and parsed with a library that only reads cell values — no
-  execution of embedded formulas as code, no macro execution.
-- Uploaded file storage path is not user-controllable (no path traversal via
-  a supplied filename).
+  execution of embedded formulas as code, no macro execution. Implemented
+  in `src/ingestion/uploadStorage.ts` (M9).
+- Uploaded file storage path is not user-controllable: the on-disk name is
+  a generated id plus a sanitized trace of the original name (separators,
+  `..`, and anything outside a safe character set stripped), so no supplied
+  filename can select a path outside `data/uploads/`.
 
 ## Data at rest
 

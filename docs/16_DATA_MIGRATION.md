@@ -2,11 +2,13 @@
 
 ## Automatic backup
 
-The app takes an automatic local backup on a schedule (default: on each app
-startup after a threshold interval since the last backup, plus after every
-workbook import) to a local backup directory outside the live database file.
-Retention policy and exact interval are configurable in Settings; default
-values are finalized in M9 alongside implementation.
+The app takes an automatic local backup on a schedule: after every
+workbook/portfolio import (unconditional), and otherwise on a 24-hour
+interval checked whenever the Data Center screen renders — the closest
+local-first equivalent of "on startup" for a server with no background
+process of its own. The interval is configurable via the
+`autoBackupIntervalHours` app setting. Implemented in
+`src/backup/autoBackup.ts` (M9); see `docs/features/data-center.md`.
 
 ## Manual operations
 
@@ -21,7 +23,8 @@ values are finalized in M9 alongside implementation.
 
 ## Restore safety sequence (mandatory, no exceptions)
 
-Implemented in `src/backup/` (M2 skeleton; a Data Center UI wraps this in M9).
+Implemented in `src/backup/` (M2 skeleton; wrapped by the Data Center UI in
+M9 — `src/app/data-center/`).
 
 1. Take an automatic safety backup of the current live state before touching
    anything (`exportFullBackup`).
@@ -42,7 +45,7 @@ audit trail of the very operation in progress (including that restore's own
 safety-backup entry). This was found and fixed by the M2 persistence test
 suite (`tests/backup/restore.test.ts`) — an earlier version of the restore
 logic did wipe `audit_event` wholesale and failed that test. Likewise, an
-earlier version compared timestamps across *all* tables including
+earlier version compared timestamps across _all_ tables including
 `audit_event`, which meant every restore's own safety-backup audit entry
 made "current" always look newer than any backup — a permanent false-positive
 conflict. Both are why `audit_event` is excluded from `getNewestTimestamp`
