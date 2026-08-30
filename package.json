@@ -17,7 +17,13 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "backup:export": "tsx scripts/backup-cli.ts export",
+    "backup:restore": "tsx scripts/backup-cli.ts restore"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
@@ -37,6 +43,7 @@
     "eslint-config-next": "^15.0.0",
     "prettier": "^3.3.0",
     "prisma": "^5.20.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

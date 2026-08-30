@@ -37,6 +37,8 @@
     "next-env.d.ts",
     "src",
     "tests",
+    "prisma",
+    "scripts",
     ".next/types/**/*.ts"
   ],
   "exclude": [
