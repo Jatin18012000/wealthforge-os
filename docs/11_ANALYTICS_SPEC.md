@@ -1,7 +1,38 @@
 # 11 — Analytics Spec
 
-Status: implemented in M7, built on top of the M4 engine and M5 portfolio
-ingestion.
+Status: **built (M7)** — `src/domain/periods.ts` (period resolution),
+`src/domain/analytics.ts` (aggregation, coverage, comparison),
+`src/views/analyticsView.ts`, and the `/analytics` screen.
+
+## The governing rule: never pro-rate a month
+
+Different data has different granularity, and pretending otherwise invents
+figures:
+
+- **Budget data is monthly.** A month contributes to a range only when the
+  range *fully contains* it. A 15-day window touching August cannot take
+  "half of August's salary" — that number appears in no source. Months the
+  range merely clips are excluded and the exclusion is stated.
+- **Activity is exactly dated**, so it sums precisely over any range.
+- **Portfolio and net worth are point-in-time**, compared at the range's
+  endpoints rather than summed.
+
+Every result carries a `PeriodCoverage`: which months were counted, which
+were only partly inside the range, and which had no data at all. A month
+with no data is reported as *absent*, never as zero.
+
+## Comparison basis
+
+The default comparison is the equal-length period immediately before. For
+month-aligned ranges the shift is by whole calendar months, because that is
+what the comparison means — the month before July is June, even though
+subtracting July's 31 days lands on 31 May. Ranges that are not month-aligned
+shift by their exact duration, the only well-defined answer for them.
+"Same period last year" is offered as an alternative basis.
+
+A metric absent on either side yields nulls and is marked incomplete rather
+than being treated as zero: the difference between "spent nothing" and "we
+have no record" is exactly what a variance table must not blur.
 
 ## Periods
 

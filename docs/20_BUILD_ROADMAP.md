@@ -13,7 +13,7 @@ passing in an actual session (tests run, not assumed).
 | M4 | Deterministic financial engine | COMPLETE | `src/domain/`: money/dates primitives, `Computed<T>` insufficiency contract, trust filtering, net worth, portfolio valuation + allocation + concentration, budget summary + Plan vs Reality, goals + projections + allocation guards, EMI payer split + burden + release, CAGR/XIRR/P&L. `src/data/loaders.ts` keeps the domain database-free | 89 domain tests + 4 end-to-end (workbook → engine) — 122 across the suite | pnpm typecheck/lint/test/build all passed clean this session | One real bug found by the test suite and fixed: `setUTCMonth` month-end overflow made 31 Aug + 10 months land on 1 July instead of 30 June, which could flip a goal's "misses target date" verdict. Fixed with `addMonthsClamped`, applied to both goal and EMI projections. | D-010 (resolved) | (pending commit) | 2026-08-30 |
 | M5 | Portfolio ingestion | COMPLETE | `src/ingestion/portfolio/`: RFC 4180 CSV reader + XLSX path, column alias tolerance, instrument resolution, snapshot revisions, observed-change detection with transaction reconciliation, Portfolio Import Audit. Schema: position cost basis + supersede pointer, activity quantity | 16 snapshot tests over 9 fixtures, including a slice proving imported data flows into the M4 valuation engine — 138 across the suite | pnpm typecheck/lint/test/build all passed clean this session | One real bug found by the test suite and fixed: two duplicate rows within one file were treated as a correction, so the second silently superseded the first — dropping a real lot, the exact loss the duplicate flagging exists to prevent. Corrections are now cross-import only. Column layouts validated against synthetic fixtures only; real broker exports still needed (D-005). | D-011 (resolved); D-006 still deferred and not blocking | (pending commit) | 2026-08-30 |
 | M6 | Dashboard V1 | COMPLETE | `src/presentation` formatters, `src/views` view models, `src/components` primitives, five App Router screens, demo seed that ingests the reference fixtures through the real pipeline | 23 view/format tests + 46 Playwright E2E across laptop and iPad — 178 unit/integration total | pnpm typecheck/lint/test/build/e2e all passed; all five screens screenshotted and inspected | Two real defects found and fixed: a malformed period rendered the literal string "Invalid Date", and unexplained position changes never reached the UI. One a11y issue fixed: period chips duplicated `aria-current="page"` with the sidebar. | D-005 closed earlier; no new blockers | (pending commit) | 2026-08-30 |
-| M7 | Analytics | NOT STARTED | Periods, filters, Plan vs Reality | Range/insufficient-data tests | Pending | — | — | — | — |
+| M7 | Analytics | COMPLETE | `src/domain/periods.ts` (19 period kinds incl. Indian FY), `src/domain/analytics.ts` (coverage model, comparison, planned-vs-observed allocation), `src/views/analyticsView.ts`, `/analytics` screen with period/comparison/filter selectors | 48 new tests (22 period + 17 analytics + 9 view) and 12 new E2E — 226 unit/integration and 60 E2E total | pnpm typecheck/lint/test/build/e2e all passed; screen inspected across periods | One real bug fixed: `precedingRange` shifted month-aligned ranges by duration, so the month before July resolved to 31 May rather than 1 June. One consistency fix: the allocation table used a different month-inclusion rule than the variance table above it. Reference fixture extended from 2 to 4 month sheets to match the real workbook. | — | (pending commit) | 2026-08-30 |
 | M8 | Manual controls | NOT STARTED | Overrides across all domains | Audit/recalculation tests | Pending | — | — | — | — |
 | M9 | Data Center | NOT STARTED | Backup/restore/import/export/audit UI | Recovery drill | Pending | — | — | — | — |
 | M10 | Market/reporting | NOT STARTED | Market data, freshness, reports | Provider-failure tests | Pending | D-007 unresolved | D-007 | — | — |
@@ -202,5 +202,31 @@ the UI, leaving that refusal buried in the audit log. Plus one accessibility
 fix: the Budget period chips claimed `aria-current="page"` alongside the
 sidebar link, so two elements asserted they were the current page.
 
-**M6 is COMPLETE.** Next milestone: **M7 — Analytics** (universal periods,
-filters, Plan vs Reality, comparisons) per `docs/11_ANALYTICS_SPEC.md`.
+**M6 is COMPLETE.**
+
+## M7 exit gate (from source build plan §19)
+
+"Range/insufficient-data tests" pass. Tracked here explicitly:
+
+- [x] Every documented period resolves: 15d, 30d, 1/3/6/9/12 months, 1–5
+      years, YTD, Indian financial year, previous month/quarter/FY, since
+      inception, and custom.
+- [x] Ranges are half-open, so a boundary date belongs to exactly one
+      period.
+- [x] **A month is never pro-rated.** Budget figures contribute only from
+      months the range fully contains; clipped months are excluded and
+      reported, and months with no data are counted as absent, not zero.
+- [x] Comparison against the preceding period or the same period last year,
+      with absolute and proportional variance, and ratios left undefined
+      against a zero base.
+- [x] Coverage warnings from both sides reach the screen.
+- [x] Filters by activity kind and instrument; planned-vs-observed
+      allocation keeping each side distinct.
+- [x] **Insufficient-data paths tested**: an unresolvable custom period, a
+      since-inception period with no data, a comparison side with no
+      records, and a 15-day window covering no whole month.
+- [x] 226 unit/integration tests and 60 E2E across laptop and iPad;
+      typecheck, lint and build clean.
+
+**M7 is COMPLETE.** Next milestone: **M8 — Manual controls** (overrides
+across all domains) per `docs/02_REQUIREMENTS.md`.
