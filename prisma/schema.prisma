@@ -99,9 +99,17 @@ model PlanRecord {
 
 model Instrument {
   id          String @id @default(cuid())
-  kind        String // equity | etf | mutual_fund | gold | silver | epf | cash
+  kind        String // equity | etf | mutual_fund | gold | silver | epf | cash | index
   identifier  String? // ticker / ISIN / scheme code, where applicable
   displayName String
+  /// Optional free-market-data ticker (e.g. a Yahoo Finance symbol like
+  /// "RELIANCE.NS") used only to fetch a live price (src/market/) — never
+  /// used as identity. `identifier` (ISIN/scheme code) remains the source
+  /// of truth for what an instrument *is*; this is only where to *look up
+  /// a price for it*, and may be absent (no live price fetched; manual
+  /// entry or the last known valuation stands, per docs/18_FAILURE_MODES.md
+  /// "market data provider unavailable").
+  marketSymbol String?
 
   positionSnapshots PositionSnapshot[]
   valuations        Valuation[]
@@ -302,7 +310,7 @@ model ManualAdjustment {
 
 model AuditEvent {
   id        String   @id @default(cuid())
-  kind      String // import | revision | manual_override | rule_change | backup | restore
+  kind      String // import | revision | manual_override | rule_change | backup | restore | market_refresh
   payloadJson String
   createdAt DateTime @default(now())
 

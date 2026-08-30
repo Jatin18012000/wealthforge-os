@@ -52,8 +52,10 @@ created_at`
 trust_state, created_at`
 
 **instrument**
-`id, kind (equity | etf | mutual_fund | gold | silver | epf | cash),
-identifier (ticker/ISIN/scheme code where applicable), display_name`
+`id, kind (equity | etf | mutual_fund | gold | silver | epf | cash | index),
+identifier (ticker/ISIN/scheme code where applicable), display_name,
+market_symbol (nullable — an optional free-market-data ticker used only to
+fetch a live price, M10; `identifier` remains the identity field)`
 
 **valuation**
 `id, instrument_id, as_of_date, price_minor_units, currency, source,

@@ -41,3 +41,15 @@ export function daysInMonth(year: number, month: number): number {
   // Day 0 of the next month is the last day of this one.
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 }
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Whole days between two instants, floored. Used wherever "how stale is
+ * this" needs an answer — portfolio pricing (`valuePosition`) and market
+ * data freshness (`src/market/`) both measure age this same way, so this
+ * is the one place that arithmetic lives.
+ */
+export function daysBetween(later: Date, earlier: Date): number {
+  return Math.floor((later.getTime() - earlier.getTime()) / MS_PER_DAY);
+}

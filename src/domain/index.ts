@@ -16,7 +16,7 @@ export {
   bpsToRatio,
 } from "./money";
 export { isTrusted, untrustedReason, type TrustState } from "./trust";
-export { addMonthsClamped, daysInMonth } from "./dates";
+export { addMonthsClamped, daysInMonth, daysBetween } from "./dates";
 export {
   computeNetWorth,
   type AssetInput,
