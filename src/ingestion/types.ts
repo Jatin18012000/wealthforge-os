@@ -32,6 +32,12 @@ export interface RawCell {
   value: string | number | Date | boolean | null;
   /** A1-style reference, e.g. "C4", for provenance drill-down. */
   ref: string;
+  /**
+   * True when the source cell held a formula (only its cached result is
+   * read). A formula usually means a derived figure — a subtotal restating
+   * rows already counted — which must not be imported as a line item.
+   */
+  isFormula?: boolean;
 }
 
 export interface RawRow {
@@ -41,11 +47,27 @@ export interface RawRow {
   cells: Record<string, RawCell>;
 }
 
+/**
+ * A row addressed by column position rather than header text.
+ *
+ * Needed for layouts where meaning comes from position rather than a header
+ * — the reference budget workbook places income and expenses in side-by-side
+ * label+amount column pairs whose positions shift between sheets
+ * (docs/REFERENCE_DOCUMENT_REGISTER.md, R-01).
+ */
+export interface RawGridRow {
+  readonly rowNumber: number;
+  /** Indexed by 1-based column number; absent entries are empty cells. */
+  readonly cells: ReadonlyMap<number, RawCell>;
+}
+
 export interface RawSheet {
   name: string;
   kind: SheetKind;
   headers: string[];
   rows: RawRow[];
+  /** Positional view of the same sheet, for position-driven layouts. */
+  grid: RawGridRow[];
 }
 
 export interface RawWorkbook {

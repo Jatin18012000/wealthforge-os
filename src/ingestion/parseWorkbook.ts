@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import ExcelJS from "exceljs";
 import { classifySheetKind } from "./sheetClassifier";
-import type { RawCell, RawRow, RawSheet, RawWorkbook } from "./types";
+import type { RawCell, RawGridRow, RawRow, RawSheet, RawWorkbook } from "./types";
 
 /**
  * Reads EVERY worksheet in the workbook — never a subset, never only the
@@ -33,6 +33,28 @@ export function parseWorkbookInstance(
   });
 
   return { fileName, fileHash, sheets };
+}
+
+/** True when the source cell holds a formula, i.e. a derived figure. */
+function isFormulaCell(cell: ExcelJS.Cell): boolean {
+  const value: unknown = cell.value;
+  return typeof value === "object" && value !== null && "formula" in value;
+}
+
+function buildGrid(worksheet: ExcelJS.Worksheet): RawGridRow[] {
+  const grid: RawGridRow[] = [];
+
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    const cells = new Map<number, RawCell>();
+    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      const value = readCellValue(cell);
+      if (value === null || String(value).trim() === "") return;
+      cells.set(colNumber, { value, ref: cell.address, isFormula: isFormulaCell(cell) });
+    });
+    if (cells.size > 0) grid.push({ rowNumber, cells });
+  });
+
+  return grid;
 }
 
 function parseWorksheet(worksheet: ExcelJS.Worksheet, defaultYear: number): RawSheet {
@@ -76,6 +98,7 @@ function parseWorksheet(worksheet: ExcelJS.Worksheet, defaultYear: number): RawS
     kind: classifySheetKind(worksheet.name, defaultYear),
     headers,
     rows,
+    grid: buildGrid(worksheet),
   };
 }
 
