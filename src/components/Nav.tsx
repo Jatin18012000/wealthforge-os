@@ -16,6 +16,7 @@ const LINKS = [
   { href: "/liabilities", label: "Liabilities" },
   { href: "/analytics", label: "Analytics" },
   { href: "/settings", label: "Settings" },
+  { href: "/data-center", label: "Data Center" },
 ] as const;
 
 export function Nav() {

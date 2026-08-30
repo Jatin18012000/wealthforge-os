@@ -359,3 +359,93 @@ test.describe("Settings — manual controls", () => {
     await expect(page.getByRole("button", { name: "Confirm override" })).toHaveCount(0);
   });
 });
+
+test.describe("Data Center", () => {
+  test("renders every section: imports, backup/restore, provenance, trust, revisions, audit log", async ({
+    page,
+  }) => {
+    await page.goto("/data-center");
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Data Center" }),
+    ).toBeVisible();
+    for (const title of [
+      "Import a budget workbook",
+      "Import a portfolio snapshot",
+      "Backup & restore",
+      "Provenance — uploaded documents",
+      "Trust states",
+      "Revisions",
+      "Audit log",
+    ]) {
+      await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    }
+  });
+
+  test("uploading a real budget workbook runs the actual pipeline and shows an Import Audit", async ({
+    page,
+  }) => {
+    await page.goto("/data-center");
+
+    const budgetForm = page.locator('form:has(input[name="file"][accept=".xlsx"])');
+    await budgetForm
+      .locator('input[name="file"]')
+      .setInputFiles("tests/fixtures/reference/budget-reference-layout.xlsx");
+    await budgetForm.getByRole("button", { name: "Upload and import" }).click();
+
+    await page.waitForURL(/data-center\?event=/);
+    await expect(page.getByRole("heading", { name: "Import Audit" })).toBeVisible();
+    // The uploaded file is stored under a generated name on disk, but the
+    // screen shows the name the browser reported, not the generated one.
+    const banner = page.locator(".card", { hasText: "Import Audit" });
+    await expect(
+      banner.getByText(/Budget workbook "budget-reference-layout\.xlsx"/),
+    ).toBeVisible();
+    await expect(banner.getByText(/A backup was taken automatically/)).toBeVisible();
+
+    // The just-performed import is also reflected in the provenance table,
+    // not only in the banner.
+    await expect(page.getByText("budget-reference-layout.xlsx").first()).toBeVisible();
+  });
+
+  test("refuses a portfolio snapshot with neither a date nor an asset class, changing nothing", async ({
+    page,
+  }) => {
+    await page.goto("/data-center");
+
+    const portfolioForm = page.locator(
+      'form:has(input[name="file"][accept=".xlsx,.csv"])',
+    );
+    await portfolioForm
+      .locator('input[name="file"]')
+      .setInputFiles("tests/fixtures/portfolio/equity-v1-base.csv");
+    // Neither as-of date nor asset class supplied.
+    await portfolioForm.getByRole("button", { name: "Upload and import" }).click();
+
+    await page.waitForURL(/data-center\?error=/);
+    await expect(page.getByText(/Nothing was changed\./)).toBeVisible();
+    await expect(
+      page.getByText(/states neither an as-of date nor an asset class/),
+    ).toBeVisible();
+  });
+
+  test("exports a backup on demand and lists it", async ({ page }) => {
+    await page.goto("/data-center");
+
+    await page.getByRole("button", { name: "Export a backup now" }).click();
+    await page.waitForURL(/data-center\?backedUp=1/);
+
+    await expect(page.getByText("Backup written.")).toBeVisible();
+    await expect(
+      page.getByRole("cell", { name: /wealthforge-backup-.*\.json/ }).first(),
+    ).toBeVisible();
+  });
+
+  test("has exactly one h1 and a labelled nav, like every other screen", async ({
+    page,
+  }) => {
+    await page.goto("/data-center");
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+});
