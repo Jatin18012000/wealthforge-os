@@ -24,7 +24,9 @@ release-ready (`docs/FINAL_AUDIT_REPORT.md` at M12).
 13. The core app works fully without a hosted/cloud database.
 14. The system makes no unsupported financial claims — `insufficient-data`
     is returned rather than a fabricated or approximated figure whenever the
-    documented data requirement for a calculation isn't met.
+    documented data requirement for a calculation isn't met. **Built (M11
+    for the AI layer)** — `src/ai/grounding.ts` rejects any AI response
+    stating a figure not present in its grounding payload.
 
 ## Status
 
