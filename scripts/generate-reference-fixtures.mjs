@@ -178,9 +178,62 @@ const AUGUST = {
   investments: INVESTMENTS,
 };
 
+// June and July sit between May and August, matching the real workbook's
+// four month sheets. June still lacks a Frequency column; July gains one —
+// the same mid-year change the reference file shows.
+const JUNE = {
+  bannerRow: 4,
+  incomeCol: 4,
+  expenseCol: 6,
+  frequencyCol: null,
+  emiDateCol: 8,
+  income: [
+    { label: "Salary", amount: 61000 },
+    { label: "Sibling contribution", amount: 2250 },
+    { label: "Credit card cashback", amount: 3000 },
+  ],
+  expenses: [
+    { label: "Home emi", amount: 5000, emiEnd: "2039-12-01" },
+    { label: "Phone emi (sibling)", amount: 2900, emiEnd: "2027-02-01" },
+    { label: "Tablet emi", amount: 3600, emiEnd: "2027-01-01" },
+    { label: "Card A", amount: 13000 },
+    { label: "Card B", amount: 6100 },
+    { label: "Mobile recharge ", amount: 379 },
+    { label: "Cloud subscription ", amount: 749 },
+    { label: "Daily commute and exp", amount: 10000 },
+  ],
+  investments: INVESTMENTS,
+};
+
+const JULY = {
+  bannerRow: 4,
+  incomeCol: 4,
+  expenseCol: 6,
+  frequencyCol: 8,
+  emiDateCol: 9,
+  income: [
+    { label: "Salary", amount: 63500 },
+    { label: "Sibling contribution", amount: 2250 },
+    { label: "Previous month leftover salary", amount: 0 },
+  ],
+  expenses: [
+    { label: "Home emi", amount: 5000, frequency: "Monthly", emiEnd: "2039-12-01" },
+    { label: "Phone emi (sibling)", amount: 2900, frequency: "Monthly", emiEnd: "2027-02-01" },
+    { label: "Tablet emi", amount: 3600, frequency: "Monthly", emiEnd: "2027-01-01" },
+    { label: "Card A", amount: 5650, frequency: "Every month, full payment " },
+    { label: "Card B", amount: 5651, frequency: "Every month, full payment " },
+    { label: "Mobile recharge ", amount: 379, frequency: "Monthly" },
+    { label: "Cloud subscription ", amount: 749, frequency: "Monthly" },
+    { label: "Daily commute and exp", amount: 10000, frequency: "Monthly" },
+  ],
+  investments: INVESTMENTS,
+};
+
 async function buildBudgetWorkbook() {
   const wb = new ExcelJS.Workbook();
   addMonthSheet(wb, "May", MAY);
+  addMonthSheet(wb, "June", JUNE);
+  addMonthSheet(wb, "July", JULY);
   addMonthSheet(wb, "August", AUGUST);
 
   const core = wb.addWorksheet("Core expenses");
