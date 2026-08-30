@@ -80,6 +80,23 @@ describe("Data Center view", () => {
     expect(view.auditLog.find((e) => e.kind === "restore")?.summary).toContain("forced");
   });
 
+  it("decodes a market_refresh audit_event summarizing every source", async () => {
+    await db.auditEvent.create({
+      data: {
+        kind: "market_refresh",
+        payloadJson: JSON.stringify([
+          { source: "AMFI (mutual funds)", updatedCount: 2, failedCount: 0 },
+          { source: "Yahoo Finance (indices)", updatedCount: 3, failedCount: 1 },
+        ]),
+      },
+    });
+
+    const view = await getDataCenterView(db);
+    const entry = view.auditLog.find((row) => row.kind === "market_refresh");
+    expect(entry?.summary).toContain("AMFI (mutual funds): 2 updated, 0 failed");
+    expect(entry?.summary).toContain("Yahoo Finance (indices): 3 updated, 1 failed");
+  });
+
   it("falls back to a plain label rather than crashing on an unreadable payload", async () => {
     const created = await db.auditEvent.create({
       data: { kind: "import", payloadJson: "{not json" },

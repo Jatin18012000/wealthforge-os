@@ -54,6 +54,14 @@ function summarize(row: AuditEventRow): string {
       return p.action === "revoked"
         ? `Override withdrawn on ${String(p.entityType)}.${String(p.field)}`
         : `${String(p.entityType)}.${String(p.field)} overridden`;
+    case "market_refresh": {
+      if (!Array.isArray(payload)) return "Market data refreshed";
+      const parts = payload.map((entry) => {
+        const e = entry as Record<string, unknown>;
+        return `${String(e.source)}: ${String(e.updatedCount)} updated, ${String(e.failedCount)} failed`;
+      });
+      return `Market data refreshed — ${parts.join("; ")}`;
+    }
     default:
       return row.kind;
   }
