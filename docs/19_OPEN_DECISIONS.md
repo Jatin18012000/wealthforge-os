@@ -75,6 +75,18 @@ one specific one of these, the dashboard can label that one as *the*
 headline surplus in M6. No stored data or calculation changes either way —
 only which rollup gets top billing.
 
+## Resolved during M5
+
+### D-011: Snapshot as-of date is a required parameter
+**Decision:** `importPortfolioSnapshot` takes an explicit `asOf` date and an
+explicit `assetClass`; neither is inferred from the file or the clock.
+**Why:** the same reasoning as D-009. Broker exports rarely carry a
+machine-readable as-of date, and inferring one from the file's mtime or
+"today" would misdate an entire portfolio — every historical valuation and
+net-worth figure built on it would then be wrong in a way that looks
+plausible. Asset class is explicit for the same reason: guessing "equity"
+for a mutual-fund export would put units and shares in the same bucket.
+
 ## Open — genuinely unresolved, flagging rather than guessing
 
 ### D-005: No actual 2026 budget workbook file was supplied

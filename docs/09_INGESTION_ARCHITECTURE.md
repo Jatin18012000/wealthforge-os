@@ -89,6 +89,49 @@ Decisions made while implementing, each chosen to avoid guessing at money:
   marked `needs_review` with a revision recording the disappearance, so a
   human decides whether the removal was intentional.
 
+## Portfolio snapshot ingestion (M5)
+
+Implemented in `src/ingestion/portfolio/`. Holdings exports arrive as CSV or
+XLSX from a broker or fund house; the CSV reader is hand-rolled to RFC 4180
+(`csv.ts`) so quoted fields, embedded commas, escaped quotes, CRLF, and
+Excel's UTF-8 BOM are all handled without a dependency.
+
+**A snapshot is a position at a date, not a record of activity.** This
+distinction drives the whole design:
+
+- **Same date, different numbers → a correction.** The prior observation is
+  superseded via a `Revision`, never overwritten
+  (`position_snapshot.superseded_by_id`).
+- **Later date, different quantity → a new observation.** Both rows stand;
+  the earlier one is history, not a mistake.
+- **A quantity change is never turned into a transaction.** The importer
+  reports an `ObservedPositionChange` and reconciles it against recorded
+  buy/sell activity where those carry quantities. If nothing accounts for
+  the delta, it is surfaced as unexplained for a human — the system never
+  fabricates a buy or sell to make the numbers agree
+  (`01_PRODUCT_VISION.md`, "Observed change ≠ confirmed transaction").
+  Reconciliation is claimed only when *every* transaction in the window
+  carries a quantity; otherwise the result is "cannot say", not "reconciled".
+
+Other decisions, consistent with budget ingestion:
+
+- **The as-of date is a required parameter.** A holdings export carries no
+  reliable date of its own, and guessing one would misdate the entire
+  portfolio (D-011).
+- **Unparseable quantities and prices are flagged, never coerced.** A price
+  that will not parse yields no valuation rather than a fabricated one.
+- **A duplicated holding within one file is flagged, not resolved.** Summing
+  double-counts a duplicated export line; keeping one drops a genuine second
+  lot. Both copies are written as separate `needs_review` snapshots. An
+  early version treated the second row as a *correction* of the first,
+  silently superseding it — precisely the data loss the flagging exists to
+  prevent. Corrections are cross-import only; within one file a repeat is an
+  ambiguity (`importSnapshot.ts`, `writtenThisRun`).
+- **Cost basis prefers a reported total over a derived one.** An "invested"
+  column is a fact from the source; average cost × quantity is a derivation,
+  used only when no total is reported. With neither, cost basis is NULL and
+  P&L correctly reports insufficient data.
+
 ## Idempotency
 
 Re-uploading a byte-identical workbook must result in every sheet classified
