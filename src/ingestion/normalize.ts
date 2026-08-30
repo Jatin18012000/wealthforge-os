@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { matchMonthSheet } from "./sheetClassifier";
+import { extractBudgetSheet } from "./sources/budgetWorkbook";
 import type {
   ExtractedRow,
   ExtractedSheet,
@@ -150,6 +151,14 @@ export function computeContentHash(sheet: RawSheet): string {
 export function extractSheet(sheet: RawSheet, defaultYear: number): ExtractedSheet {
   const contentHash = computeContentHash(sheet);
   const sheetIssues: string[] = [];
+
+  // The reference workbook's side-by-side layout is tried first; the generic
+  // header-in-row-1 path below still handles simple exports and manual
+  // tables (docs/REFERENCE_DOCUMENT_REGISTER.md, R-01).
+  if (sheet.kind === "month") {
+    const referenceLayout = extractBudgetSheet(sheet, defaultYear, contentHash);
+    if (referenceLayout !== null) return referenceLayout;
+  }
 
   if (sheet.kind !== "month") {
     // Reference and unrecognized sheets are scanned, hashed, and retained
