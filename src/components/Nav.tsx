@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/portfolio", label: "Portfolio" },
   { href: "/goals", label: "Goals" },
   { href: "/liabilities", label: "Liabilities" },
+  { href: "/insurance", label: "Insurance" },
   { href: "/analytics", label: "Analytics" },
   { href: "/settings", label: "Settings" },
   { href: "/market", label: "Market" },

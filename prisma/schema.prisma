@@ -247,16 +247,16 @@ model Goal {
 // --- Insurance ------------------------------------------------------------
 
 model InsurancePolicy {
-  id                    String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   kind                  String // health_personal | health_family | term | other
   insuredParty          String
-  coverAmountMinorUnits Int
-  premiumMinorUnits     Int
-  premiumFrequency      String // monthly | quarterly | annual
+  coverAmountMinorUnits Int? // null = cover amount not yet known/decided, never fabricated as 0
+  premiumMinorUnits     Int? // null = premium not yet known/decided, never fabricated as 0
+  premiumFrequency      String? // monthly | quarterly | annual; null when premium is unknown
   provider              String
   status                String // active | planned | lapsed
   effectiveFrom         DateTime?
-  createdAt             DateTime @default(now())
+  createdAt             DateTime  @default(now())
 
   @@map("insurance_policy")
 }

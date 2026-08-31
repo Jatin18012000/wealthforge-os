@@ -201,6 +201,49 @@ export async function loadLiabilities(db: PrismaClient): Promise<LiabilityDetail
   }));
 }
 
+export interface InsurancePolicyDetail {
+  readonly id: string;
+  readonly kind: string;
+  readonly insuredParty: string;
+  readonly coverAmountMinorUnits: number | null;
+  readonly premiumMinorUnits: number | null;
+  readonly premiumFrequency: string | null;
+  readonly provider: string;
+  readonly status: string;
+  readonly effectiveFrom: Date | null;
+}
+
+export async function loadInsurancePolicies(
+  db: PrismaClient,
+): Promise<InsurancePolicyDetail[]> {
+  const rows = await db.insurancePolicy.findMany({ orderBy: { createdAt: "asc" } });
+  const adjustments = await loadEffectiveAdjustments(db, "insurance_policy");
+
+  return rows.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    insuredParty: row.insuredParty,
+    coverAmountMinorUnits: adjusted(
+      adjustments,
+      "insurance_policy",
+      row.id,
+      "coverAmount",
+      row.coverAmountMinorUnits,
+    ),
+    premiumMinorUnits: adjusted(
+      adjustments,
+      "insurance_policy",
+      row.id,
+      "premium",
+      row.premiumMinorUnits,
+    ),
+    premiumFrequency: row.premiumFrequency,
+    provider: row.provider,
+    status: row.status,
+    effectiveFrom: row.effectiveFrom,
+  }));
+}
+
 /**
  * The latest position snapshot per instrument at or before `asOf`.
  * A later snapshot is never used to describe an earlier date.

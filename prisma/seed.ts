@@ -113,12 +113,15 @@ async function main() {
   }
 
   // --- Insurance policies ---
+  // Cover amounts are per docs/02_REQUIREMENTS.md; premiums and the term
+  // policy's cover amount are not stated there, so they are left null
+  // (never fabricated as 0 — see prisma/demo-seed.ts for the same rule).
   const policies: Array<{
     kind: string;
     insuredParty: string;
-    coverAmountMinorUnits: number;
-    premiumMinorUnits: number;
-    premiumFrequency: string;
+    coverAmountMinorUnits: number | null;
+    premiumMinorUnits: number | null;
+    premiumFrequency: string | null;
     provider: string;
     status: string;
   }> = [
@@ -126,8 +129,8 @@ async function main() {
       kind: "health_personal",
       insuredParty: "User",
       coverAmountMinorUnits: 250_000 * 100,
-      premiumMinorUnits: 0,
-      premiumFrequency: "annual",
+      premiumMinorUnits: null,
+      premiumFrequency: null,
       provider: "Unspecified",
       status: "active",
     },
@@ -135,17 +138,17 @@ async function main() {
       kind: "health_family",
       insuredParty: "Family",
       coverAmountMinorUnits: 1_000_000 * 100,
-      premiumMinorUnits: 0,
-      premiumFrequency: "annual",
+      premiumMinorUnits: null,
+      premiumFrequency: null,
       provider: "Aditya Birla One NXT",
       status: "active",
     },
     {
       kind: "term",
       insuredParty: "User",
-      coverAmountMinorUnits: 0,
-      premiumMinorUnits: 0,
-      premiumFrequency: "annual",
+      coverAmountMinorUnits: null,
+      premiumMinorUnits: null,
+      premiumFrequency: null,
       provider: "Unspecified",
       status: "planned",
     },

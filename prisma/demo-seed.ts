@@ -224,6 +224,50 @@ async function seedGoalsAndLiability(): Promise<void> {
   }
 }
 
+async function seedInsurance(): Promise<void> {
+  const existing = await db.insurancePolicy.findFirst();
+  if (existing !== null) return;
+
+  // Figures per docs/02_REQUIREMENTS.md — the only insurance data the
+  // requirements doc actually specifies. Cover amounts are recorded where
+  // stated; premiums and the term policy's cover amount are not stated
+  // anywhere, so they are left null (never fabricated as 0) and render as
+  // "not recorded" on the Insurance screen. Term insurance is recorded as
+  // `planned`, not `active`, since it is explicitly not yet in force.
+  await db.insurancePolicy.createMany({
+    data: [
+      {
+        kind: "health_personal",
+        insuredParty: PRIMARY_PAYER,
+        coverAmountMinorUnits: 2_50_000 * 100,
+        premiumMinorUnits: null,
+        premiumFrequency: null,
+        provider: "Unspecified",
+        status: "active",
+      },
+      {
+        kind: "health_family",
+        insuredParty: "Family",
+        coverAmountMinorUnits: 10_00_000 * 100,
+        premiumMinorUnits: null,
+        premiumFrequency: null,
+        provider: "Aditya Birla One NXT",
+        status: "active",
+      },
+      {
+        kind: "term",
+        insuredParty: PRIMARY_PAYER,
+        coverAmountMinorUnits: null,
+        premiumMinorUnits: null,
+        premiumFrequency: null,
+        provider: "Unspecified",
+        status: "planned",
+        effectiveFrom: new Date("2026-12-31T00:00:00Z"),
+      },
+    ],
+  });
+}
+
 async function main(): Promise<void> {
   await ingestFixtures();
 
@@ -235,6 +279,7 @@ async function main(): Promise<void> {
 
   await seedCash(asOf, 27_000);
   await seedGoalsAndLiability();
+  await seedInsurance();
 
   await db.appSetting.upsert({
     where: { key: PRIMARY_PAYER_SETTING_KEY },
