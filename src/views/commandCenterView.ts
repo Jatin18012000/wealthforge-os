@@ -55,46 +55,7 @@ export async function getCommandCenterView(
   const budget =
     periodMonth === null ? null : await getBudgetView(db, periodMonth, availablePeriods);
 
-  // Cash is an instrument priced at ₹1 per unit, so the same valuation path
-  // covers it; it is separated out here only for display.
-  const cashPositions = (await loadPositionsAsOf(db, asOf)).filter(
-    (position) => position.assetClass === CASH_ASSET_CLASS,
-  );
-  const valuations = await loadValuations(db, asOf);
-  const cashValuation =
-    cashPositions.length === 0 ? null : valuePortfolio(cashPositions, valuations, asOf);
-  const cashMinorUnits =
-    cashValuation !== null && cashValuation.kind === "ok"
-      ? cashValuation.value.totalMinorUnits
-      : null;
-
-  const assets: AssetInput[] = [];
-  if (portfolio.valuation.kind === "ok") {
-    assets.push({
-      id: "portfolio",
-      label: "Portfolio",
-      kind: "portfolio",
-      valueMinorUnits: portfolio.valuation.value.totalMinorUnits,
-      trustState: "validated",
-    });
-  }
-  if (cashMinorUnits !== null) {
-    assets.push({
-      id: "cash",
-      label: "Cash",
-      kind: "cash",
-      valueMinorUnits: cashMinorUnits,
-      trustState: "validated",
-    });
-  }
-
-  const liabilityInputs: LiabilityInput[] = liabilities.cards.map((card) => ({
-    id: card.liability.id,
-    name: card.liability.name,
-    outstandingMinorUnits: card.liability.outstandingMinorUnits,
-    outstandingAsOf: card.liability.outstandingAsOf,
-    trustState: "validated",
-  }));
+  const { netWorth, cashMinorUnits } = await computeNetWorthAsOf(db, asOf, portfolio, liabilities);
 
   const primaryPayer = await getPrimaryPayerName(db);
   const takeHome =
@@ -111,7 +72,7 @@ export async function getCommandCenterView(
 
   return {
     asOf,
-    netWorth: computeNetWorth(assets, liabilityInputs, asOf),
+    netWorth,
     cashMinorUnits,
     portfolio,
     budget,
@@ -119,6 +80,73 @@ export async function getCommandCenterView(
     liabilities,
     emiBurden,
     alerts: await buildAlerts(db, portfolio, budget, goals),
+  };
+}
+
+/**
+ * Net worth at an arbitrary date, composed from the same portfolio/cash/
+ * liability views the Command Center itself uses. Factored out so the v1.1
+ * intelligence layer (`wealthIntelligenceView.ts`'s Net Worth Trajectory)
+ * can compute it for a series of historical dates without duplicating this
+ * composition (CLAUDE.md, "no parallel implementations").
+ *
+ * Callers that already have a `PortfolioView`/`LiabilitiesView` for `asOf`
+ * (e.g. this file's own `getCommandCenterView`) may pass them in to avoid
+ * recomputing; omit either to have this function load them.
+ */
+export async function computeNetWorthAsOf(
+  db: PrismaClient,
+  asOf: Date,
+  portfolio?: PortfolioView,
+  liabilities?: LiabilitiesView,
+): Promise<{ netWorth: Computed<NetWorth>; cashMinorUnits: number | null }> {
+  const resolvedPortfolio = portfolio ?? (await getPortfolioView(db, asOf));
+  const resolvedLiabilities = liabilities ?? (await getLiabilitiesView(db, asOf));
+
+  // Cash is an instrument priced at ₹1 per unit, so the same valuation path
+  // covers it; it is separated out here only for display.
+  const cashPositions = (await loadPositionsAsOf(db, asOf)).filter(
+    (position) => position.assetClass === CASH_ASSET_CLASS,
+  );
+  const valuations = await loadValuations(db, asOf);
+  const cashValuation =
+    cashPositions.length === 0 ? null : valuePortfolio(cashPositions, valuations, asOf);
+  const cashMinorUnits =
+    cashValuation !== null && cashValuation.kind === "ok"
+      ? cashValuation.value.totalMinorUnits
+      : null;
+
+  const assets: AssetInput[] = [];
+  if (resolvedPortfolio.valuation.kind === "ok") {
+    assets.push({
+      id: "portfolio",
+      label: "Portfolio",
+      kind: "portfolio",
+      valueMinorUnits: resolvedPortfolio.valuation.value.totalMinorUnits,
+      trustState: "validated",
+    });
+  }
+  if (cashMinorUnits !== null) {
+    assets.push({
+      id: "cash",
+      label: "Cash",
+      kind: "cash",
+      valueMinorUnits: cashMinorUnits,
+      trustState: "validated",
+    });
+  }
+
+  const liabilityInputs: LiabilityInput[] = resolvedLiabilities.cards.map((card) => ({
+    id: card.liability.id,
+    name: card.liability.name,
+    outstandingMinorUnits: card.liability.outstandingMinorUnits,
+    outstandingAsOf: card.liability.outstandingAsOf,
+    trustState: "validated",
+  }));
+
+  return {
+    netWorth: computeNetWorth(assets, liabilityInputs, asOf),
+    cashMinorUnits,
   };
 }
 

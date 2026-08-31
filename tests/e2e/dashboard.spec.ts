@@ -84,6 +84,20 @@ test.describe("Command Center", () => {
     await expect(page.getByText("Left over cash", { exact: true })).toBeVisible();
     await expect(page.getByText("retained − investments")).toBeVisible();
   });
+
+  test("shows the wealth intelligence section (v1.1)", async ({ page }) => {
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { name: "Wealth intelligence" })).toBeVisible();
+    for (const heading of [
+      "Net worth trajectory",
+      "Monthly money flow",
+      "Savings & investment rate trend",
+      "Net worth waterfall",
+    ]) {
+      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    }
+  });
 });
 
 test.describe("Budget", () => {

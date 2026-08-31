@@ -114,7 +114,7 @@ that cannot honor one of these for lack of data reports
 | Milestone | Status |
 |---|---|
 | IM-01 Intelligence Foundation | COMPLETE — `src/domain/insight.ts`, 13 unit tests, no UI surface (pure infrastructure) |
-| IM-02 Wealth Intelligence | NOT STARTED |
+| IM-02 Wealth Intelligence | COMPLETE — `src/views/wealthIntelligenceView.ts` (Net Worth Trajectory, Assets vs Liabilities, Net Worth Waterfall, Monthly Money Flow, Savings Rate Trend, Investment Rate Trend), net worth composition extracted to reusable `computeNetWorthAsOf` in `commandCenterView.ts`, wired into the Command Center under a new "Wealth intelligence" section, 7 view-model unit tests + 2 E2E tests (laptop/iPad); 409 unit tests and 124 E2E tests passing repo-wide |
 | IM-03 Investment Intelligence | NOT STARTED |
 | IM-04 Goal & Liability Intelligence | NOT STARTED |
 | IM-05 Behavioral & Data Intelligence | NOT STARTED |
