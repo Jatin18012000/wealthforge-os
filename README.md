@@ -9,12 +9,13 @@ deterministic financial engine (net worth, P&L, allocation, EMI, goal
 funding), and provides an AI analyst layer that explains — but never
 invents — the numbers.
 
-Status: **M0–M11 complete, M12 (release hardening) in progress** (see
-[`docs/20_BUILD_ROADMAP.md`](docs/20_BUILD_ROADMAP.md)). All ten screens —
-Command Center, Budget, Portfolio, Goals, Liabilities, Analytics, Settings,
-Data Center, Market, and AI Analyst — are built against the real ingestion
-and financial engine, with 370+ unit/integration tests and 90+ Playwright
-E2E tests across laptop and iPad.
+Status: **M0–M12 complete; post-M12 engineering closure (Round 2) in
+progress** (see [`docs/20_BUILD_ROADMAP.md`](docs/20_BUILD_ROADMAP.md)).
+All eleven screens — Command Center, Budget, Portfolio, Goals, Liabilities,
+Insurance, Analytics, Settings, Data Center, Market, and AI Analyst — are
+built against the real ingestion and financial engine, with 380+
+unit/integration tests and 110+ Playwright E2E tests across laptop and
+iPad.
 
 ## Why this exists
 

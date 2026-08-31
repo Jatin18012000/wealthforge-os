@@ -373,3 +373,77 @@ Full release gate. Tracked here explicitly against
 per `docs/FINAL_AUDIT_REPORT.md`'s verdict — subject only to documented,
 non-blocking open decisions (D-006, D-008, D-015, D-016), none of which
 the stated success condition (`CLAUDE.md` §29) requires.
+
+## Post-M12, Round 2: engineering closure findings
+
+The "FINAL ENGINEERING CLOSURE → UI TESTING PHASE" directive required
+re-verifying a numbered list of Round 2 (R2) findings against the
+controlling docs before declaring engineering closure. Status of each:
+
+- **R2-01 (Insurance screen)** — CONFIRMED missing, FIXED. Built
+  `src/views/insuranceView.ts` + `/insurance` route + nav entry,
+  connected to `InsurancePolicy` data. `coverAmountMinorUnits`,
+  `premiumMinorUnits`, and `premiumFrequency` were made nullable
+  (additive migration) rather than fabricated as 0 for the figures
+  `docs/02_REQUIREMENTS.md` never states.
+- **R2-02 (provenance drill-down)** — assessed SATISFIED BY DESIGN, not a
+  gap requiring new UI. `docs/03_INFORMATION_ARCHITECTURE.md` requires
+  "every headline number... is drillable: clicking it opens a detail view
+  showing the contributing records and their provenance/trust state."
+  Every screen already shows its contributing line items directly, with
+  `TrustBadge`, inline — one navigation away, not behind a literal
+  clickable number. Building a separate modal/detail-view mechanism on
+  top of that would duplicate what is already visible and risks the
+  "no redesign" instruction; left as-is.
+- **R2-03 (period selector consistency)** — CONFIRMED consistent, no fix
+  needed. Command Center, Budget, Portfolio, and Analytics all resolve
+  their period through the one shared `src/views/context.ts`
+  (`resolveAsOf`/`listPeriods`/`resolveLatestPeriod`) — no competing
+  period system exists.
+- **R2-04 (Analytics filters)** — CONFIRMED partially missing, PARTIALLY
+  FIXED. The asset-class filter (`assetClasses`) existed end-to-end in
+  `src/views/analyticsView.ts` but had no UI control; added a "Filter
+  asset class" badge list next to the existing activity-kind one,
+  composing with it. Instrument, source/provider, and metric filters
+  remain unbuilt — no enumerable instrument/provider list is wired into
+  this view yet, and "metric" filtering has no defined UI semantics in
+  the current table layout; documented as a known, deferred gap rather
+  than built speculatively.
+- **R2-05 (custom period comparison)** — CONFIRMED missing, FIXED. The
+  "custom" period key existed in the domain (`resolvePeriod`) but was
+  hidden from the Analytics UI, and the view only ever derived its
+  comparison side automatically (preceding/prior-year) — there was no
+  path to compare two independently chosen ranges, despite
+  `docs/11_ANALYTICS_SPEC.md` requiring exactly that. Added a `"custom"`
+  `ComparisonMode` and a `customComparison` option to `getAnalyticsView`,
+  and two date-range forms on the Analytics screen, reusing the existing
+  half-open `DateRange` architecture — no new comparison engine.
+- **R2-06 (manual controls coverage)** — CONFIRMED two real gaps, BOTH
+  FIXED:
+  - No UI ever recorded a goal contribution/withdrawal, despite
+    `docs/04_USER_FLOWS.md`'s fully-specified "Allocate leftover cash to
+    a goal" flow and the domain check (`canAllocateToGoal`, `src/domain/goals.ts`)
+    existing since M4. Added a form on the Budget screen; the server
+    action re-derives what remains of the period's unallocated cash
+    after earlier allocations before checking a new one, and records one
+    `goal_contribution` Activity on success.
+  - Manual price/NAV entry only existed for an index with no free source
+    (Nifty Metal, D-016) — a held equity/ETF with no opted-in symbol, or
+    a mutual fund AMFI does not carry, had no fallback. Extended the same
+    (already instrument-agnostic) action to the Equities & ETFs and
+    Mutual Funds tables on the Market screen.
+- **R2-07 (Groww)** — CONFIRMED no real fixture exists; matches the
+  already-documented D-014. No new work — manual CSV/XLSX import remains
+  the functional path regardless, and no Groww compatibility is claimed
+  anywhere.
+- **R2-08 (documentation consistency)** — this section, plus the
+  Information Architecture screens table (`Insurance` row) and
+  `docs/features/market-data.md`, updated to reflect the above.
+
+Separately, Phase 3's financial-integrity re-check required a regression
+test proving a credit-card purchase (expense) and its bill payment
+(liability settlement) are never double-counted; none existed, so one was
+added to `tests/domain/budget.test.ts`.
+
+All of the above shipped with full typecheck/lint/unit/E2E coverage per
+commit (388 unit tests, 112 E2E across both viewports as of this section).
