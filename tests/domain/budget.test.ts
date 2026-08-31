@@ -168,4 +168,49 @@ describe("plan vs reality", () => {
   it("rejects a malformed period string", () => {
     expect(comparePlanVsActual(AUGUST, [], "not-a-month").kind).toBe("insufficient-data");
   });
+
+  /**
+   * This project has no distinct "credit card" domain concept — a card
+   * purchase is recorded as an ordinary expense line (e.g. "Card A" in the
+   * budget workbook), and paying off the card's statement is recorded as
+   * a liability instalment (`emi_payment`) if the card carries a revolving
+   * balance modeled as a `Liability`. The double-counting risk this guards
+   * against: a card purchase must land in `expense` exactly once, a card
+   * bill payment settling that liability must land in `emi` exactly once,
+   * and the two must never be summed into each other — otherwise the same
+   * rupee would be counted twice (once as spending, once as debt service)
+   * or the household's real outflow would be understated by netting them.
+   */
+  it("never double-counts a credit card purchase (expense) against its bill payment (liability settlement)", () => {
+    const cardPurchase = activity({
+      id: "card-a-purchase",
+      kind: "one_time_expense",
+      amountMinorUnits: 500_000,
+    });
+    const cardBillPayment = activity({
+      id: "card-a-bill-payment",
+      kind: "emi_payment",
+      amountMinorUnits: 500_000,
+    });
+
+    const comparison = expectOk(
+      comparePlanVsActual(AUGUST, [cardPurchase, cardBillPayment], "2026-08"),
+    );
+
+    const expense = comparison.categories.find((c) => c.category === "expense");
+    const emi = comparison.categories.find((c) => c.category === "emi");
+
+    // The purchase counts once, under expense...
+    expect(expense?.actualMinorUnits).toBe(500_000);
+    // ...and the bill payment counts once, under emi — not folded into
+    // expense, and not summed with the purchase into either bucket.
+    expect(emi?.actualMinorUnits).toBe(500_000);
+
+    // Total money the categorization attributes across both buckets equals
+    // exactly the two real transactions — proof neither was counted twice
+    // and neither swallowed the other.
+    expect((expense?.actualMinorUnits ?? 0) + (emi?.actualMinorUnits ?? 0)).toBe(
+      cardPurchase.amountMinorUnits + cardBillPayment.amountMinorUnits,
+    );
+  });
 });
