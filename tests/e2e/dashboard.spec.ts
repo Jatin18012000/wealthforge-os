@@ -116,6 +116,45 @@ test.describe("Budget", () => {
     const row = page.locator("tr", { hasText: "Smart watch" }).first();
     await expect(row).toContainText("EMIs");
   });
+
+  test("allocates leftover cash to a goal and reduces what remains to allocate", async ({
+    page,
+  }) => {
+    await page.goto("/budget");
+    await expect(
+      page.getByRole("heading", { name: "Allocate leftover cash to a goal" }),
+    ).toBeVisible();
+
+    const allocationCard = page.locator(".card", {
+      hasText: "Allocate leftover cash to a goal",
+    });
+    const remainingText = await allocationCard
+      .locator("tr", { hasText: "Remaining to allocate" })
+      .locator("td.num")
+      .innerText();
+    // "-₹..." (negative — already over-allocated for this period) vs "₹..."
+    const remainingIsNegative = remainingText.trim().startsWith("-");
+
+    await allocationCard.locator('select[name="goalId"]').selectOption({ index: 1 });
+    await allocationCard.locator('input[name="amount"]').fill("1");
+    await allocationCard.getByRole("button", { name: "Allocate" }).click();
+
+    if (remainingIsNegative) {
+      // Nothing is left to allocate, so even ₹1 must be refused — the check
+      // must use what remains *after* earlier allocations, never the raw
+      // plan-level unallocated figure.
+      await page.waitForURL(/budget\?period=.*allocationError=/);
+      await expect(page.getByText(/exceeds unallocated cash/)).toBeVisible();
+    } else {
+      await page.waitForURL(/budget\?period=.*allocated=1/);
+      await expect(page.getByText("Contribution recorded.")).toBeVisible();
+      const remainingAfter = await allocationCard
+        .locator("tr", { hasText: "Remaining to allocate" })
+        .locator("td.num")
+        .innerText();
+      expect(remainingAfter).not.toEqual(remainingText);
+    }
+  });
 });
 
 test.describe("Portfolio", () => {

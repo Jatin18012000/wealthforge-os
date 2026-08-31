@@ -16,6 +16,7 @@ import {
 } from "../../presentation/format";
 import { getBudgetView } from "../../views/budgetView";
 import { listPeriods, resolveLatestPeriod } from "../../views/context";
+import { allocateToGoalAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default async function BudgetPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; allocated?: string; allocationError?: string }>;
 }) {
   const params = await searchParams;
   const periods = await listPeriods(db);
@@ -62,6 +63,13 @@ export default async function BudgetPage({
       </div>
 
       <div className="stack">
+        {params.allocated !== undefined && (
+          <p className="alert">Contribution recorded.</p>
+        )}
+        {params.allocationError !== undefined && (
+          <p className="alert alert--caution">{params.allocationError}</p>
+        )}
+
         <Card title="Period">
           <ul className="inline-list">
             {view.availablePeriods.map((period) => (
@@ -148,6 +156,68 @@ export default async function BudgetPage({
               </>
             )}
           </Computed$>
+        </Card>
+
+        <Card title="Allocate leftover cash to a goal">
+          <div className="table-scroll">
+            <table>
+              <tbody>
+                <tr>
+                  <td>Already allocated to goals this period</td>
+                  <td className="num">
+                    {formatMoney(view.alreadyAllocatedToGoalsMinorUnits)}
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <strong>Remaining to allocate</strong>
+                  </td>
+                  <td className="num">
+                    <Computed$ result={view.remainingToAllocateMinorUnits} showReasons={false}>
+                      {(remaining) => <strong>{formatMoney(remaining)}</strong>}
+                    </Computed$>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {view.allocatableGoals.length === 0 ? (
+            <p className="note" style={{ marginTop: "0.5rem" }}>
+              No goal is currently open to contributions.
+            </p>
+          ) : (
+            <form action={allocateToGoalAction} className="entry-form" style={{ marginTop: "0.75rem" }}>
+              <input type="hidden" name="periodMonth" value={view.periodMonth} />
+              <select
+                name="goalId"
+                className="field__input"
+                aria-label="Goal to allocate to"
+                defaultValue=""
+                required
+              >
+                <option value="" disabled>
+                  Choose a goal
+                </option>
+                {view.allocatableGoals.map((goal) => (
+                  <option key={goal.id} value={goal.id}>
+                    {goal.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="field__input"
+                name="amount"
+                inputMode="decimal"
+                placeholder="e.g. 1000"
+                aria-label="Amount to allocate, in rupees"
+                required
+              />
+              <button type="submit" className="button button--primary">
+                Allocate
+              </button>
+            </form>
+          )}
         </Card>
 
         <Card title="Plan vs Reality">
