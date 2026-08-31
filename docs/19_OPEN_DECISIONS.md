@@ -181,16 +181,31 @@ advance rather than presented as already-validated.
 figures redacted/scaled if preferred) before or during M3, so the parser can
 be validated against real structure rather than only the synthetic fixture.
 
-### D-006: Zerodha/Kite and Groww integration timing and auth method
+### D-006: Zerodha/Kite and Groww integration timing and auth method — CONFIRMED DEFERRED (post-M12)
 
 The source documents say to prefer read-only access and never store secrets
 in source, but do not specify _when_ to build these integrations or which
-auth flow (API key vs. OAuth-style token) to use for either. Per the source
-documents' own instruction (§21, §7), imported/manual data must remain fully
-sufficient without these integrations — they are not required for any
-milestone through M12. **Decision deferred**, not required to unblock any
-current milestone. Will be raised as a single question if/when M5+ work
-would otherwise require guessing an auth approach.
+auth flow (API key vs. OAuth-style token) to use for either.
+
+Raised as the one required question in the post-M12 continuation pass,
+since it genuinely cannot be resolved autonomously: Zerodha's official API
+(Kite Connect) requires a paid developer subscription (~₹500/month,
+billed to the user's own Zerodha account) plus registering an app and
+completing an OAuth-style login flow — a real-money, account-level
+decision this agent must not make silently. Groww has no official public
+API at all; integrating it would mean reverse-engineering a private
+endpoint, carrying ToS/legal risk beyond what any other integration in
+this project accepts (contrast the Yahoo Finance provider, M10, which is
+free and merely unofficial, not proprietary/reverse-engineered).
+
+**User's decision: leave deferred.** Manual CSV/XLSX import remains the
+only portfolio data path, exactly as documented and tested throughout
+M5–M12 — no paid subscription, no ToS risk, nothing further required.
+Per the source documents' own instruction (§21, §7), imported/manual data
+is fully sufficient without this integration, and this decision confirms
+that remains the intended state, not merely an interim one. Not blocking
+any milestone. May be revisited if the user later decides the Kite
+Connect subscription cost is worthwhile.
 
 ### D-007: Market data provider selection — RESOLVED (M10)
 
