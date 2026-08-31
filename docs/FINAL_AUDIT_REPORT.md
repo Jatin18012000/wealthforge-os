@@ -214,11 +214,11 @@ Per a subsequent autonomous-continuation directive, every remaining
 deferred decision was re-triaged rather than treating "M0–M12 complete"
 as a stopping point:
 
-| Decision | Classification | Outcome |
-|---|---|---|
-| D-016 (Nifty Metal, no free source) | B — implement with free fallback | **Closed.** Added manual entry (`recordManualIndexQuoteAction`) for any index lacking a free source, writing into the same `Valuation` table a fetch would use. This was rung 4 of the fallback hierarchy (reliable free source → free EOD source → locally imported data → manual entry → clearly marked unavailable); rung 5 was already built in M10, rung 4 was not — genuinely missing, now closed. |
-| D-008 (desktop packaging) | C — optional, safe to defer | Documented in `docs/19_OPEN_DECISIONS.md`: Tauri could be built at ₹0, but the existing local web app already satisfies the stated success condition (laptop primary, iPad secondary, both via browser) — building a native packaging toolchain now would be new build-system surface with no functional gain, which is exactly what `CLAUDE.md`'s Cost Philosophy warns against as unnecessary complexity. Not built. |
-| D-006 (brokerage integration) | D/E — requires a user decision | Not resolved autonomously: it requires deciding an authentication flow (API key vs. OAuth-style token) for a real brokerage account, which touches credentials this agent must not guess or request in chat. Raised to the user as the one required question. |
+| Decision                            | Classification                   | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-016 (Nifty Metal, no free source) | B — implement with free fallback | **Closed.** Added manual entry (`recordManualIndexQuoteAction`) for any index lacking a free source, writing into the same `Valuation` table a fetch would use. This was rung 4 of the fallback hierarchy (reliable free source → free EOD source → locally imported data → manual entry → clearly marked unavailable); rung 5 was already built in M10, rung 4 was not — genuinely missing, now closed.               |
+| D-008 (desktop packaging)           | C — optional, safe to defer      | Documented in `docs/19_OPEN_DECISIONS.md`: Tauri could be built at ₹0, but the existing local web app already satisfies the stated success condition (laptop primary, iPad secondary, both via browser) — building a native packaging toolchain now would be new build-system surface with no functional gain, which is exactly what `CLAUDE.md`'s Cost Philosophy warns against as unnecessary complexity. Not built. |
+| D-006 (brokerage integration)       | D/E — requires a user decision   | Not resolved autonomously: it requires deciding an authentication flow (API key vs. OAuth-style token) for a real brokerage account, which touches credentials this agent must not guess or request in chat. Raised to the user as the one required question.                                                                                                                                                          |
 
 A repository-wide backlog scan (TODOs/FIXMEs, dead code, duplicated
 logic, missing validation) found:
@@ -233,7 +233,7 @@ logic, missing validation) found:
   strings and an ad hoc tolerance instead of either — exactly the
   "scattered mapping" anti-pattern `docs/09_INGESTION_ARCHITECTURE.md`
   warns against. Fixed to consume both from the registry; the new
-  tolerance is the *larger* of the old ad hoc one and the registry's
+  tolerance is the _larger_ of the old ad hoc one and the registry's
   fixed floor, so it cannot introduce a new false positive for any
   currently-passing fixture. All 72 ingestion tests still pass unchanged.
 - **An incidental-ordering risk**: the Settings screen's group order

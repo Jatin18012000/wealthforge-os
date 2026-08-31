@@ -3,7 +3,11 @@ import { Card, EmptyState } from "../../components/Primitives";
 import { db } from "../../lib/db";
 import { formatDate, formatMoney } from "../../presentation/format";
 import { getMarketView } from "../../views/marketView";
-import { recordManualIndexQuoteAction, refreshMarketDataAction, setMarketSymbolAction } from "./actions";
+import {
+  recordManualIndexQuoteAction,
+  refreshMarketDataAction,
+  setMarketSymbolAction,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +51,9 @@ export default async function MarketPage({
       <div className="stack">
         {one("error") !== "" && <p className="alert alert--caution">{one("error")}</p>}
         {one("symbolSet") !== "" && <p className="alert">Symbol saved.</p>}
-        {one("manualQuoteSet") !== "" && <p className="alert">Manual reading recorded.</p>}
+        {one("manualQuoteSet") !== "" && (
+          <p className="alert">Manual reading recorded.</p>
+        )}
         {one("refreshed") !== "" && (
           <p className={one("failed") !== "0" ? "alert alert--caution" : "alert"}>
             <span className="alert__title">Refresh complete.</span> {one("updated")} price
@@ -112,8 +118,15 @@ export default async function MarketPage({
                       {index.hasFreeSource ? (
                         <span className="note">—</span>
                       ) : (
-                        <form action={recordManualIndexQuoteAction} className="entry-form">
-                          <input type="hidden" name="instrumentId" value={index.instrumentId} />
+                        <form
+                          action={recordManualIndexQuoteAction}
+                          className="entry-form"
+                        >
+                          <input
+                            type="hidden"
+                            name="instrumentId"
+                            value={index.instrumentId}
+                          />
                           <input
                             className="field__input"
                             type="date"
@@ -139,9 +152,9 @@ export default async function MarketPage({
             </table>
           </div>
           <p className="note" style={{ marginTop: "0.5rem" }}>
-            An index with no free source (currently only Nifty Metal) can be recorded by hand —
-            the source is labeled &quot;manual&quot; and treated exactly like any other
-            reading for freshness purposes.
+            An index with no free source (currently only Nifty Metal) can be recorded by
+            hand — the source is labeled &quot;manual&quot; and treated exactly like any
+            other reading for freshness purposes.
           </p>
         </Card>
 

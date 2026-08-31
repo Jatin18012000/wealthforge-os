@@ -100,9 +100,14 @@ describe("manual overrides", () => {
   it("orders Settings groups by the declared OVERRIDE_GROUPS sequence, not by incidental insertion order", async () => {
     const groups = await listOverrideTargets(db, { periodMonth });
     const order = groups.map((group) => group.group);
-    const expectedOrder = ["Budget", "Portfolio", "Goals", "Liabilities", "Insurance", "Custom"].filter(
-      (group) => order.includes(group as (typeof order)[number]),
-    );
+    const expectedOrder = [
+      "Budget",
+      "Portfolio",
+      "Goals",
+      "Liabilities",
+      "Insurance",
+      "Custom",
+    ].filter((group) => order.includes(group as (typeof order)[number]));
     expect(order).toEqual(expectedOrder);
   });
 

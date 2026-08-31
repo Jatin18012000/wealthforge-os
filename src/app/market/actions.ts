@@ -86,16 +86,26 @@ export async function recordManualIndexQuoteAction(form: FormData): Promise<void
     redirect("/market?error=" + encodeURIComponent(parsed.reasons.join("; ")));
   }
 
-  const existing = await db.valuation.findFirst({ where: { instrumentId, asOfDate: asOf } });
+  const existing = await db.valuation.findFirst({
+    where: { instrumentId, asOfDate: asOf },
+  });
   if (existing !== null) {
     redirect(
       "/market?error=" +
-        encodeURIComponent("A value for that date is already recorded; pick a different date."),
+        encodeURIComponent(
+          "A value for that date is already recorded; pick a different date.",
+        ),
     );
   }
 
   await db.valuation.create({
-    data: { instrumentId, asOfDate: asOf, priceMinorUnits: parsed.value, currency: "INR", source: "manual" },
+    data: {
+      instrumentId,
+      asOfDate: asOf,
+      priceMinorUnits: parsed.value,
+      currency: "INR",
+      source: "manual",
+    },
   });
 
   revalidatePath("/market");
