@@ -17,7 +17,12 @@ const SCREENS = [
   { path: "/portfolio", heading: "Portfolio" },
   { path: "/goals", heading: "Goals" },
   { path: "/liabilities", heading: "Liabilities" },
+  { path: "/insurance", heading: "Insurance" },
   { path: "/analytics", heading: "Analytics" },
+  { path: "/settings", heading: "Settings" },
+  { path: "/data-center", heading: "Data Center" },
+  { path: "/market", heading: "Market" },
+  { path: "/ai-analyst", heading: "AI Analyst" },
 ] as const;
 
 test.describe("navigation", () => {
@@ -241,13 +246,15 @@ test.describe("accessibility basics", () => {
     expect(focused).toBe("A");
   });
 
-  test("does not scroll horizontally at iPad width", async ({ page }) => {
-    await page.goto("/");
-    const overflows = await page.evaluate(
-      () =>
-        document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-    );
-    expect(overflows).toBe(false);
+  test("does not scroll horizontally at iPad width, on any screen", async ({ page }) => {
+    for (const screen of SCREENS) {
+      await page.goto(screen.path);
+      const overflows = await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      );
+      expect(overflows, `${screen.heading} should not overflow horizontally`).toBe(false);
+    }
   });
 });
 

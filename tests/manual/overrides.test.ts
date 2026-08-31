@@ -396,4 +396,26 @@ describe("goal balance overrides", () => {
     expect(custom?.targets[0]?.currentValue).toBe(50_000_00);
     expect(custom?.targets[0]?.sourceValue).toBeNull();
   });
+
+  it("never leaks the literal string \"null\" into an insurance premium's label when the frequency is unrecorded", async () => {
+    await db.insurancePolicy.create({
+      data: {
+        kind: "term",
+        insuredParty: "You",
+        coverAmountMinorUnits: null,
+        premiumMinorUnits: null,
+        premiumFrequency: null,
+        provider: "Unspecified",
+        status: "planned",
+      },
+    });
+
+    const groups = await listOverrideTargets(db);
+    const insurance = groups.find((group) => group.group === "Insurance");
+    const premiumTargets = insurance?.targets.filter((t) => t.definition.field === "premium");
+    expect(premiumTargets?.length).toBeGreaterThan(0);
+    for (const target of premiumTargets ?? []) {
+      expect(target.label).not.toContain("null");
+    }
+  });
 });

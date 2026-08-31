@@ -192,7 +192,10 @@ export async function listOverrideTargets(
     rows.push({
       definition: field("insurance_policy", "premium"),
       entityId: policy.id,
-      label: `${policy.insuredParty} · ${policy.provider} · ${policy.premiumFrequency}`,
+      label:
+        policy.premiumFrequency === null
+          ? `${policy.insuredParty} · ${policy.provider}`
+          : `${policy.insuredParty} · ${policy.provider} · ${policy.premiumFrequency}`,
       sourceValue: policy.premiumMinorUnits,
     });
   }

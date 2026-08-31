@@ -182,6 +182,14 @@ export default async function BudgetPage({
             </table>
           </div>
 
+          {view.remainingToAllocateMinorUnits.kind === "ok" &&
+            view.remainingToAllocateMinorUnits.value <= 0 && (
+              <p className="alert alert--caution" style={{ marginTop: "0.5rem" }}>
+                Nothing is left to allocate this period — an allocation below will be
+                refused until more cash is left over or an earlier one is withdrawn.
+              </p>
+            )}
+
           {view.allocatableGoals.length === 0 ? (
             <p className="note" style={{ marginTop: "0.5rem" }}>
               No goal is currently open to contributions.
