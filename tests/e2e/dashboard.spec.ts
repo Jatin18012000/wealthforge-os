@@ -556,6 +556,22 @@ test.describe("Market", () => {
     await expect(firstRow.locator('input[name="marketSymbol"]')).toBeVisible();
   });
 
+  test("records a manual price for a held equity that has no live symbol configured", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/market");
+
+    const asOf = testInfo.project.name === "ipad" ? "2026-08-24" : "2026-08-23";
+    const equitiesCard = page.locator(".card", { hasText: "Equities & ETFs" });
+    const firstRow = equitiesCard.locator("tbody tr").first();
+    await firstRow.locator('input[name="asOf"]').fill(asOf);
+    await firstRow.locator('input[name="value"]').fill("2500.50");
+    await firstRow.getByRole("button", { name: "Record" }).click();
+
+    await page.waitForURL(/market\?manualQuoteSet=1/);
+    await expect(page.getByText("Manual reading recorded.")).toBeVisible();
+  });
+
   test("saving a market symbol persists it without affecting the holding's stored identity", async ({
     page,
   }) => {

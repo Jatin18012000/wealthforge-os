@@ -4,7 +4,7 @@ import { db } from "../../lib/db";
 import { formatDate, formatMoney } from "../../presentation/format";
 import { getMarketView } from "../../views/marketView";
 import {
-  recordManualIndexQuoteAction,
+  recordManualQuoteAction,
   refreshMarketDataAction,
   setMarketSymbolAction,
 } from "./actions";
@@ -119,7 +119,7 @@ export default async function MarketPage({
                         <span className="note">—</span>
                       ) : (
                         <form
-                          action={recordManualIndexQuoteAction}
+                          action={recordManualQuoteAction}
                           className="entry-form"
                         >
                           <input
@@ -160,18 +160,74 @@ export default async function MarketPage({
 
         <Card title="Mutual funds">
           <p className="note">
-            {view.mutualFundCount === 0
-              ? "No mutual fund holdings recorded yet."
-              : `${view.mutualFundCount} mutual fund holding${view.mutualFundCount === 1 ? "" : "s"} — NAVs are matched automatically by ISIN against AMFI's file, so there is nothing to configure here.`}
+            NAVs are matched automatically by ISIN against AMFI&apos;s daily file. If a
+            fund is not in that file (e.g. a fund AMFI does not carry), its NAV can be
+            entered by hand below — the same fallback the Market indices use for Nifty
+            Metal.
           </p>
+          {view.mutualFunds.length === 0 ? (
+            <EmptyState>No mutual fund holdings recorded yet.</EmptyState>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Fund</th>
+                    <th scope="col" className="num">
+                      Last NAV
+                    </th>
+                    <th scope="col">As of</th>
+                    <th scope="col">Manual entry</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {view.mutualFunds.map((fund) => (
+                    <tr key={fund.instrumentId}>
+                      <td>{fund.displayName}</td>
+                      <td className="num">
+                        {fund.latestPriceMinorUnits === null ? (
+                          <span className="note">No data</span>
+                        ) : (
+                          formatMoney(fund.latestPriceMinorUnits)
+                        )}
+                      </td>
+                      <td>{fund.asOfDate === null ? "—" : formatDate(fund.asOfDate)}</td>
+                      <td>
+                        <form action={recordManualQuoteAction} className="entry-form">
+                          <input type="hidden" name="instrumentId" value={fund.instrumentId} />
+                          <input
+                            className="field__input"
+                            type="date"
+                            name="asOf"
+                            aria-label={`Date for the manually entered ${fund.displayName} NAV`}
+                          />
+                          <input
+                            className="field__input"
+                            name="value"
+                            inputMode="decimal"
+                            placeholder="e.g. 145.32"
+                            aria-label={`Manually entered ${fund.displayName} NAV`}
+                          />
+                          <button type="submit" className="button button--quiet">
+                            Record
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
 
-        <Card title="Equities & ETFs — optional live pricing">
+        <Card title="Equities & ETFs">
           <p className="note">
-            A holding is only ever fetched if you give it a symbol below (e.g. a Yahoo
-            Finance ticker like &quot;RELIANCE.NS&quot;). Leaving it blank is a normal
-            choice — the engine reports insufficient data for that holding&apos;s
-            valuation rather than guessing, exactly as it did before this feature existed.
+            A holding is only ever fetched automatically if you give it a symbol below
+            (e.g. a Yahoo Finance ticker like &quot;RELIANCE.NS&quot;). Leaving it blank
+            is a normal choice — enter a price by hand instead, or leave both empty and
+            the engine reports insufficient data for that holding&apos;s valuation
+            rather than guessing.
           </p>
           {view.instruments.length === 0 ? (
             <EmptyState>No equity or ETF holdings recorded yet.</EmptyState>
@@ -186,6 +242,7 @@ export default async function MarketPage({
                       Last price
                     </th>
                     <th scope="col">As of</th>
+                    <th scope="col">Manual entry</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -222,6 +279,31 @@ export default async function MarketPage({
                         {instrument.asOfDate === null
                           ? "—"
                           : formatDate(instrument.asOfDate)}
+                      </td>
+                      <td>
+                        <form action={recordManualQuoteAction} className="entry-form">
+                          <input
+                            type="hidden"
+                            name="instrumentId"
+                            value={instrument.instrumentId}
+                          />
+                          <input
+                            className="field__input"
+                            type="date"
+                            name="asOf"
+                            aria-label={`Date for the manually entered ${instrument.displayName} price`}
+                          />
+                          <input
+                            className="field__input"
+                            name="value"
+                            inputMode="decimal"
+                            placeholder="e.g. 2500.50"
+                            aria-label={`Manually entered ${instrument.displayName} price`}
+                          />
+                          <button type="submit" className="button button--quiet">
+                            Record
+                          </button>
+                        </form>
                       </td>
                     </tr>
                   ))}

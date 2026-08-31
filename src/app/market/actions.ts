@@ -54,26 +54,28 @@ export async function setMarketSymbolAction(form: FormData): Promise<void> {
 }
 
 /**
- * Records a manually entered index level — the last rung of the fallback
- * hierarchy (docs/MARKET_DATA_PROVIDER_EVALUATION.md, D-016) for an index
- * with no free automatic source (currently only Nifty Metal). Written into
- * the same `Valuation` table an automatic fetch uses, tagged
- * `source: "manual"`, so the freshness/staleness display needs no special
- * case for where a reading came from — exactly the principle
+ * Records a manually entered price/level for any instrument — an index with
+ * no free automatic source (currently only Nifty Metal), or a held equity,
+ * ETF, or mutual fund for which no automatic price is available (no opted-in
+ * symbol, or AMFI does not carry that fund). This is the last rung of the
+ * documented fallback hierarchy (docs/MARKET_DATA_PROVIDER_EVALUATION.md,
+ * D-007/D-016). Written into the same `Valuation` table an automatic fetch
+ * uses, tagged `source: "manual"`, so the freshness/staleness display needs
+ * no special case for where a reading came from — exactly the principle
  * `docs/features/market-data.md` states for fetched prices, extended here
  * to a typed-in one.
  *
  * Deliberately not layered through the M8 manual-adjustment machinery:
- * there is no automatically-fetched "source value" for Nifty Metal to
- * differ from — this is the only value, not an override of one.
+ * there is no automatically-fetched "source value" here to differ from —
+ * this is a new observation, not an override of an existing recorded one.
  */
-export async function recordManualIndexQuoteAction(form: FormData): Promise<void> {
+export async function recordManualQuoteAction(form: FormData): Promise<void> {
   const instrumentId = text(form, "instrumentId");
   const dateRaw = text(form, "asOf");
   const valueRaw = text(form, "value");
 
   if (instrumentId === "") {
-    redirect("/market?error=" + encodeURIComponent("No index was identified."));
+    redirect("/market?error=" + encodeURIComponent("No instrument was identified."));
   }
 
   const asOf = dateRaw === "" ? new Date() : new Date(`${dateRaw}T00:00:00.000Z`);

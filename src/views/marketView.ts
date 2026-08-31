@@ -40,11 +40,20 @@ export interface PricedInstrumentRow {
   readonly source: string | null;
 }
 
+export interface MutualFundRow {
+  readonly instrumentId: string;
+  readonly displayName: string;
+  readonly latestPriceMinorUnits: number | null;
+  readonly asOfDate: Date | null;
+  readonly ageDays: number | null;
+  readonly source: string | null;
+}
+
 export interface MarketView {
   readonly asOf: Date;
   readonly indices: readonly IndexRow[];
-  /** Mutual funds are priced automatically (matched by ISIN); nothing to opt into. */
-  readonly mutualFundCount: number;
+  /** Mutual funds — priced automatically by ISIN match, with a manual fallback for one AMFI does not carry. */
+  readonly mutualFunds: readonly MutualFundRow[];
   /** Equities/ETFs, showing which have opted into a live-price symbol. */
   readonly instruments: readonly PricedInstrumentRow[];
 }
@@ -81,7 +90,23 @@ export async function getMarketView(db: PrismaClient, asOf: Date): Promise<Marke
     });
   }
 
-  const mutualFundCount = await db.instrument.count({ where: { kind: "mutual_fund" } });
+  const mutualFundInstruments = await db.instrument.findMany({
+    where: { kind: "mutual_fund" },
+    orderBy: { displayName: "asc" },
+  });
+
+  const mutualFunds: MutualFundRow[] = [];
+  for (const instrument of mutualFundInstruments) {
+    const latest = await latestValuation(db, instrument.id);
+    mutualFunds.push({
+      instrumentId: instrument.id,
+      displayName: instrument.displayName,
+      latestPriceMinorUnits: latest?.priceMinorUnits ?? null,
+      asOfDate: latest?.asOfDate ?? null,
+      ageDays: latest === null ? null : daysBetween(asOf, latest.asOfDate),
+      source: latest?.source ?? null,
+    });
+  }
 
   const heldInstruments = await db.instrument.findMany({
     where: { kind: { in: ["equity", "etf"] } },
@@ -103,5 +128,5 @@ export async function getMarketView(db: PrismaClient, asOf: Date): Promise<Marke
     });
   }
 
-  return { asOf, indices, mutualFundCount, instruments };
+  return { asOf, indices, mutualFunds, instruments };
 }

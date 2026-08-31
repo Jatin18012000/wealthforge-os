@@ -114,11 +114,51 @@ describe("market view", () => {
     expect(view.instruments[1]?.marketSymbol).toBeNull();
   });
 
-  it("counts mutual funds separately, since they are matched automatically rather than opted in", async () => {
+  it("lists mutual funds separately, since they are matched automatically rather than opted in", async () => {
     await db.instrument.create({
       data: { kind: "mutual_fund", identifier: "INF001", displayName: "Some Fund" },
     });
     const view = await getMarketView(db, new Date("2026-08-30T00:00:00Z"));
-    expect(view.mutualFundCount).toBe(1);
+    expect(view.mutualFunds.some((f) => f.displayName === "Some Fund")).toBe(true);
+  });
+
+  it("shows a manually recorded NAV for a mutual fund AMFI does not carry", async () => {
+    const fund = await db.instrument.create({
+      data: { kind: "mutual_fund", identifier: "INF999", displayName: "Untracked Fund" },
+    });
+    await db.valuation.create({
+      data: {
+        instrumentId: fund.id,
+        asOfDate: new Date("2026-08-29T00:00:00Z"),
+        priceMinorUnits: 14_532,
+        currency: "INR",
+        source: "manual",
+      },
+    });
+
+    const view = await getMarketView(db, new Date("2026-08-30T00:00:00Z"));
+    const row = view.mutualFunds.find((f) => f.instrumentId === fund.id);
+    expect(row?.latestPriceMinorUnits).toBe(14_532);
+    expect(row?.source).toBe("manual");
+  });
+
+  it("shows a manually recorded price for a held equity with no live symbol", async () => {
+    const equity = await db.instrument.create({
+      data: { kind: "equity", identifier: "INE333", displayName: "Gamma Ltd" },
+    });
+    await db.valuation.create({
+      data: {
+        instrumentId: equity.id,
+        asOfDate: new Date("2026-08-29T00:00:00Z"),
+        priceMinorUnits: 250_050,
+        currency: "INR",
+        source: "manual",
+      },
+    });
+
+    const view = await getMarketView(db, new Date("2026-08-30T00:00:00Z"));
+    const row = view.instruments.find((i) => i.instrumentId === equity.id);
+    expect(row?.latestPriceMinorUnits).toBe(250_050);
+    expect(row?.source).toBe("manual");
   });
 });

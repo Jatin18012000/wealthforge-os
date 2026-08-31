@@ -99,7 +99,7 @@ Closes the gap between rung 5 (a clearly marked unavailable state — already
 built) and rung 4 (manual entry) of the fallback hierarchy: the Market
 screen's "Manual entry" column, shown only for an index with
 `hasFreeSource: false` (currently only Nifty Metal), lets a reading be
-typed in and recorded via `recordManualIndexQuoteAction`. It writes into
+typed in and recorded via `recordManualQuoteAction`. It writes into
 the same `Valuation` table an automatic fetch uses, tagged
 `source: "manual"`, so the freshness/staleness display treats it exactly
 like a fetched reading — no special case needed. A second entry for the
@@ -111,6 +111,20 @@ system exists for a **source value plus an adjustment** with a resulting
 value distinct from both: there is no automatically-fetched Nifty Metal
 reading for a manual one to differ from, so this is the only value, not
 an override of one.
+
+## Manual entry for any held equity, ETF, or mutual fund (R2-06)
+
+`recordManualQuoteAction` was always instrument-agnostic — it takes an
+`instrumentId`, not an index code — so the same fallback the indices use
+extends to any held instrument with no automatic price for a given date: a
+held equity or ETF with no opted-in `marketSymbol` (or one that has a
+symbol but for which a fetch failed), and a mutual fund AMFI's daily file
+does not carry. The Market screen shows a "Manual entry" column on the
+"Equities & ETFs" and "Mutual funds" tables identical in behavior to the
+index one — same form, same `source: "manual"` tag, same non-destructive
+same-date refusal. A manually entered price sits in the same `Valuation`
+history as a fetched one; whichever has the latest `asOfDate` is what every
+other screen's "latest price" reads, exactly as for indices.
 
 ## Zero-cost verification
 
