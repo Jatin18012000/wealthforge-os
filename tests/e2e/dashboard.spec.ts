@@ -317,6 +317,22 @@ test.describe("Analytics", () => {
     await page.goto("/analytics?period=previous-month");
     await expect(page.getByText(/keeps a blank on the other side/)).toBeVisible();
   });
+
+  test("filters the allocation table by asset class", async ({ page }) => {
+    await page.goto("/analytics");
+    await expect(page.getByRole("heading", { name: "Filter asset class" })).toBeVisible();
+
+    const filterCard = page.locator(".card", { hasText: "Period" });
+    const equityLink = filterCard.getByRole("link", { name: /equity/i }).first();
+    if ((await equityLink.count()) > 0) {
+      await equityLink.click();
+      await expect(page).toHaveURL(/assetClass=equity/);
+      await expect(page.getByRole("link", { name: /equity/i }).first()).toHaveAttribute(
+        "aria-current",
+        "true",
+      );
+    }
+  });
 });
 
 test.describe("Settings — manual controls", () => {

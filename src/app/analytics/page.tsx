@@ -16,16 +16,27 @@ export const dynamic = "force-dynamic";
 
 const DEFAULT_PERIOD: PeriodKey = "3m";
 
-function href(period: PeriodKey, compare: ComparisonMode, kind?: string): string {
+function href(
+  period: PeriodKey,
+  compare: ComparisonMode,
+  kind?: string,
+  assetClass?: string,
+): string {
   const params = new URLSearchParams({ period, compare });
   if (kind !== undefined && kind !== "") params.set("kind", kind);
+  if (assetClass !== undefined && assetClass !== "") params.set("assetClass", assetClass);
   return `/analytics?${params.toString()}`;
 }
 
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; compare?: string; kind?: string }>;
+  searchParams: Promise<{
+    period?: string;
+    compare?: string;
+    kind?: string;
+    assetClass?: string;
+  }>;
 }) {
   const params = await searchParams;
   const anchor = await resolveAsOf(db);
@@ -35,10 +46,16 @@ export default async function AnalyticsPage({
   const comparisonMode: ComparisonMode =
     params.compare === "prior-year" ? "prior-year" : "preceding";
   const selectedKind = params.kind ?? "";
+  const selectedAssetClass = params.assetClass ?? "";
+
+  const filters = {
+    ...(selectedKind === "" ? {} : { kinds: [selectedKind] }),
+    ...(selectedAssetClass === "" ? {} : { assetClasses: [selectedAssetClass] }),
+  };
 
   const view = await getAnalyticsView(db, anchor, periodKey, {
     comparisonMode,
-    ...(selectedKind === "" ? {} : { filters: { kinds: [selectedKind] } }),
+    ...(Object.keys(filters).length === 0 ? {} : { filters }),
   });
 
   return (
@@ -56,7 +73,7 @@ export default async function AnalyticsPage({
             {PERIOD_OPTIONS.filter((option) => option.key !== "custom").map((option) => (
               <li key={option.key}>
                 <Link
-                  href={href(option.key, comparisonMode, selectedKind)}
+                  href={href(option.key, comparisonMode, selectedKind, selectedAssetClass)}
                   className={`badge ${option.key === periodKey ? "badge--accent" : "badge--muted"}`}
                   aria-current={option.key === periodKey ? "true" : undefined}
                 >
@@ -78,7 +95,7 @@ export default async function AnalyticsPage({
             ).map(([mode, label]) => (
               <li key={mode}>
                 <Link
-                  href={href(periodKey, mode, selectedKind)}
+                  href={href(periodKey, mode, selectedKind, selectedAssetClass)}
                   className={`badge ${mode === comparisonMode ? "badge--accent" : "badge--muted"}`}
                   aria-current={mode === comparisonMode ? "true" : undefined}
                 >
@@ -96,7 +113,7 @@ export default async function AnalyticsPage({
               <ul className="inline-list">
                 <li>
                   <Link
-                    href={href(periodKey, comparisonMode)}
+                    href={href(periodKey, comparisonMode, undefined, selectedAssetClass)}
                     className={`badge ${selectedKind === "" ? "badge--accent" : "badge--muted"}`}
                     aria-current={selectedKind === "" ? "true" : undefined}
                   >
@@ -106,11 +123,42 @@ export default async function AnalyticsPage({
                 {view.availableActivityKinds.map((kind) => (
                   <li key={kind}>
                     <Link
-                      href={href(periodKey, comparisonMode, kind)}
+                      href={href(periodKey, comparisonMode, kind, selectedAssetClass)}
                       className={`badge ${kind === selectedKind ? "badge--accent" : "badge--muted"}`}
                       aria-current={kind === selectedKind ? "true" : undefined}
                     >
                       {kind.replace(/_/g, " ")}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {view.availableAssetClasses.length > 0 && (
+            <>
+              <h3 className="card__title" style={{ marginTop: "1rem" }}>
+                Filter asset class
+              </h3>
+              <p className="note">Applies to the planned-vs-held allocation table below.</p>
+              <ul className="inline-list">
+                <li>
+                  <Link
+                    href={href(periodKey, comparisonMode, selectedKind)}
+                    className={`badge ${selectedAssetClass === "" ? "badge--accent" : "badge--muted"}`}
+                    aria-current={selectedAssetClass === "" ? "true" : undefined}
+                  >
+                    All asset classes
+                  </Link>
+                </li>
+                {view.availableAssetClasses.map((assetClass) => (
+                  <li key={assetClass}>
+                    <Link
+                      href={href(periodKey, comparisonMode, selectedKind, assetClass)}
+                      className={`badge ${assetClass === selectedAssetClass ? "badge--accent" : "badge--muted"}`}
+                      aria-current={assetClass === selectedAssetClass ? "true" : undefined}
+                    >
+                      {assetClass.replace(/_/g, " ")}
                     </Link>
                   </li>
                 ))}
