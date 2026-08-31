@@ -18,7 +18,7 @@ import {
 } from "../domain";
 import { getPortfolioView } from "./portfolioView";
 
-export type ComparisonMode = "preceding" | "prior-year";
+export type ComparisonMode = "preceding" | "prior-year" | "custom";
 
 export interface AnalyticsFilters extends ActivityFilter {
   /** Restrict the observed-allocation comparison to these asset classes. */
@@ -53,6 +53,8 @@ export async function getAnalyticsView(
   options: {
     readonly comparisonMode?: ComparisonMode;
     readonly custom?: DateRange;
+    /** Required when comparisonMode is "custom" — docs/11_ANALYTICS_SPEC.md's "any two arbitrary periods". */
+    readonly customComparison?: DateRange;
     readonly filters?: AnalyticsFilters;
   } = {},
 ): Promise<AnalyticsView> {
@@ -83,8 +85,28 @@ export async function getAnalyticsView(
   }
 
   const range = rangeResult.value;
+
+  if (comparisonMode === "custom" && options.customComparison === undefined) {
+    // "Custom comparison: any two arbitrary periods" needs both sides
+    // explicit — there is no sensible default second range to fall back to.
+    return {
+      periodKey,
+      comparisonMode,
+      range: rangeResult,
+      comparison: null,
+      allocation: await buildAllocationComparison(db, anchor, range, filters),
+      availableActivityKinds,
+      availableAssetClasses,
+      inceptionDate,
+    };
+  }
+
   const priorRange =
-    comparisonMode === "prior-year" ? sameRangePriorYear(range) : precedingRange(range);
+    comparisonMode === "custom"
+      ? (options.customComparison as DateRange)
+      : comparisonMode === "prior-year"
+        ? sameRangePriorYear(range)
+        : precedingRange(range);
 
   const planRecords = await loadEffectivePlanRecords(db);
   const activities = await loadFilterableActivities(db);

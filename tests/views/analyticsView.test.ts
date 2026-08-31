@@ -81,6 +81,39 @@ describe("analytics view", () => {
     expect(view.comparison).toBeNull();
   });
 
+  it("compares any two arbitrary custom periods, as docs/11_ANALYTICS_SPEC.md requires", async () => {
+    const view = await getAnalyticsView(db, ANCHOR, "custom", {
+      custom: {
+        start: new Date("2026-08-01T00:00:00Z"),
+        end: new Date("2026-09-01T00:00:00Z"),
+      },
+      comparisonMode: "custom",
+      customComparison: {
+        start: new Date("2026-05-01T00:00:00Z"),
+        end: new Date("2026-06-01T00:00:00Z"),
+      },
+    });
+
+    expect(view.comparisonMode).toBe("custom");
+    expect(view.range.kind).toBe("ok");
+    expect(view.comparison).not.toBeNull();
+    expect(view.comparison?.current.coverage.monthsCounted).toEqual(["2026-08"]);
+    expect(view.comparison?.prior.coverage.monthsCounted).toEqual(["2026-05"]);
+  });
+
+  it("reports no comparison rather than a default one when custom mode is missing its second range", async () => {
+    const view = await getAnalyticsView(db, ANCHOR, "custom", {
+      custom: {
+        start: new Date("2026-08-01T00:00:00Z"),
+        end: new Date("2026-09-01T00:00:00Z"),
+      },
+      comparisonMode: "custom",
+    });
+
+    expect(view.range.kind).toBe("ok");
+    expect(view.comparison).toBeNull();
+  });
+
   it("resolves since-inception from the earliest data actually recorded", async () => {
     const view = await getAnalyticsView(db, ANCHOR, "since-inception");
     const range = expectOk(view.range);

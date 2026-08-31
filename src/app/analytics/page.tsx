@@ -28,6 +28,17 @@ function href(
   return `/analytics?${params.toString()}`;
 }
 
+function parseDateParam(raw: string | undefined): Date | null {
+  if (raw === undefined || raw === "") return null;
+  const date = new Date(`${raw}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** DateRange.end is exclusive — a user-picked end date must include that whole day. */
+function endOfDayExclusive(date: Date): Date {
+  return new Date(date.getTime() + 24 * 60 * 60 * 1000);
+}
+
 export default async function AnalyticsPage({
   searchParams,
 }: {
@@ -36,6 +47,10 @@ export default async function AnalyticsPage({
     compare?: string;
     kind?: string;
     assetClass?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    compareStart?: string;
+    compareEnd?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -44,7 +59,7 @@ export default async function AnalyticsPage({
   const periodKey: PeriodKey =
     params.period !== undefined && isPeriodKey(params.period) ? params.period : DEFAULT_PERIOD;
   const comparisonMode: ComparisonMode =
-    params.compare === "prior-year" ? "prior-year" : "preceding";
+    params.compare === "custom" ? "custom" : params.compare === "prior-year" ? "prior-year" : "preceding";
   const selectedKind = params.kind ?? "";
   const selectedAssetClass = params.assetClass ?? "";
 
@@ -53,8 +68,24 @@ export default async function AnalyticsPage({
     ...(selectedAssetClass === "" ? {} : { assetClasses: [selectedAssetClass] }),
   };
 
+  const periodStart = parseDateParam(params.periodStart);
+  const periodEnd = parseDateParam(params.periodEnd);
+  const custom =
+    periodKey === "custom" && periodStart !== null && periodEnd !== null
+      ? { start: periodStart, end: endOfDayExclusive(periodEnd) }
+      : undefined;
+
+  const compareStart = parseDateParam(params.compareStart);
+  const compareEnd = parseDateParam(params.compareEnd);
+  const customComparison =
+    comparisonMode === "custom" && compareStart !== null && compareEnd !== null
+      ? { start: compareStart, end: endOfDayExclusive(compareEnd) }
+      : undefined;
+
   const view = await getAnalyticsView(db, anchor, periodKey, {
     comparisonMode,
+    ...(custom === undefined ? {} : { custom }),
+    ...(customComparison === undefined ? {} : { customComparison }),
     ...(Object.keys(filters).length === 0 ? {} : { filters }),
   });
 
@@ -84,6 +115,35 @@ export default async function AnalyticsPage({
           </ul>
 
           <h3 className="card__title" style={{ marginTop: "1rem" }}>
+            Custom period
+          </h3>
+          <form action="/analytics" method="get" className="entry-form">
+            <input type="hidden" name="period" value="custom" />
+            <input type="hidden" name="compare" value={comparisonMode} />
+            {selectedKind !== "" && <input type="hidden" name="kind" value={selectedKind} />}
+            {selectedAssetClass !== "" && (
+              <input type="hidden" name="assetClass" value={selectedAssetClass} />
+            )}
+            <input
+              className="field__input"
+              type="date"
+              name="periodStart"
+              defaultValue={params.periodStart ?? ""}
+              aria-label="Custom period start date"
+            />
+            <input
+              className="field__input"
+              type="date"
+              name="periodEnd"
+              defaultValue={params.periodEnd ?? ""}
+              aria-label="Custom period end date"
+            />
+            <button type="submit" className="button button--quiet">
+              Use custom period
+            </button>
+          </form>
+
+          <h3 className="card__title" style={{ marginTop: "1rem" }}>
             Compare against
           </h3>
           <ul className="inline-list">
@@ -103,7 +163,46 @@ export default async function AnalyticsPage({
                 </Link>
               </li>
             ))}
+            <li>
+              <span
+                className={`badge ${comparisonMode === "custom" ? "badge--accent" : "badge--muted"}`}
+                aria-current={comparisonMode === "custom" ? "true" : undefined}
+              >
+                Custom
+              </span>
+            </li>
           </ul>
+          <form action="/analytics" method="get" className="entry-form" style={{ marginTop: "0.5rem" }}>
+            <input type="hidden" name="period" value={periodKey} />
+            {custom !== undefined && (
+              <>
+                <input type="hidden" name="periodStart" value={params.periodStart ?? ""} />
+                <input type="hidden" name="periodEnd" value={params.periodEnd ?? ""} />
+              </>
+            )}
+            <input type="hidden" name="compare" value="custom" />
+            {selectedKind !== "" && <input type="hidden" name="kind" value={selectedKind} />}
+            {selectedAssetClass !== "" && (
+              <input type="hidden" name="assetClass" value={selectedAssetClass} />
+            )}
+            <input
+              className="field__input"
+              type="date"
+              name="compareStart"
+              defaultValue={params.compareStart ?? ""}
+              aria-label="Custom comparison start date"
+            />
+            <input
+              className="field__input"
+              type="date"
+              name="compareEnd"
+              defaultValue={params.compareEnd ?? ""}
+              aria-label="Custom comparison end date"
+            />
+            <button type="submit" className="button button--quiet">
+              Compare against a custom period
+            </button>
+          </form>
 
           {view.availableActivityKinds.length > 0 && (
             <>
@@ -171,7 +270,11 @@ export default async function AnalyticsPage({
           {(range) => (
             <Card title={`${periodLabel(periodKey)} · ${formatDate(range.start)} to ${formatDate(range.end)}`}>
               {view.comparison === null ? (
-                <EmptyState>Nothing to compare for this period.</EmptyState>
+                <EmptyState>
+                  {comparisonMode === "custom"
+                    ? "Enter both a start and end date above to compare against a custom period."
+                    : "Nothing to compare for this period."}
+                </EmptyState>
               ) : (
                 <>
                   {view.comparison.coverageNotes.length > 0 && (

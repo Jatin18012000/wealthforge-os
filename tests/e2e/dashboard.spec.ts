@@ -318,6 +318,27 @@ test.describe("Analytics", () => {
     await expect(page.getByText(/keeps a blank on the other side/)).toBeVisible();
   });
 
+  test("compares two arbitrary custom periods against each other", async ({ page }) => {
+    await page.goto("/analytics");
+    await expect(page.getByRole("heading", { name: "Custom period" })).toBeVisible();
+
+    const periodForm = page.locator("form", { has: page.locator('input[name="periodStart"]') });
+    await periodForm.locator('input[name="periodStart"]').fill("2026-08-01");
+    await periodForm.locator('input[name="periodEnd"]').fill("2026-08-31");
+    await periodForm.getByRole("button", { name: "Use custom period" }).click();
+    await expect(page).toHaveURL(/period=custom/);
+
+    const compareForm = page.locator("form", {
+      has: page.locator('input[name="compareStart"]'),
+    });
+    await compareForm.locator('input[name="compareStart"]').fill("2026-05-01");
+    await compareForm.locator('input[name="compareEnd"]').fill("2026-05-31");
+    await compareForm.getByRole("button", { name: "Compare against a custom period" }).click();
+    await expect(page).toHaveURL(/compare=custom/);
+
+    await expect(page.getByText(/Enter both a start and end date/)).toHaveCount(0);
+  });
+
   test("filters the allocation table by asset class", async ({ page }) => {
     await page.goto("/analytics");
     await expect(page.getByRole("heading", { name: "Filter asset class" })).toBeVisible();
