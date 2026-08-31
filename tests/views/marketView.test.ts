@@ -48,6 +48,33 @@ describe("market view", () => {
     expect(view.indices.find((i) => i.code === "NIFTY_METAL")?.hasFreeSource).toBe(false);
   });
 
+  it("exposes the instrument id for every index, so a manual reading can be recorded against it", async () => {
+    const view = await getMarketView(db, new Date("2026-08-30T00:00:00Z"));
+    for (const index of view.indices) {
+      expect(index.instrumentId).toBeTruthy();
+    }
+  });
+
+  it("shows a manually recorded reading (e.g. for Nifty Metal) the same way as a fetched one", async () => {
+    const view = await getMarketView(db, new Date("2026-08-30T00:00:00Z"));
+    const metal = view.indices.find((i) => i.code === "NIFTY_METAL");
+
+    await db.valuation.create({
+      data: {
+        instrumentId: metal?.instrumentId as string,
+        asOfDate: new Date("2026-08-29T00:00:00Z"),
+        priceMinorUnits: 945_020,
+        currency: "INR",
+        source: "manual",
+      },
+    });
+
+    const after = await getMarketView(db, new Date("2026-08-30T00:00:00Z"));
+    const updated = after.indices.find((i) => i.code === "NIFTY_METAL");
+    expect(updated?.latestPriceMinorUnits).toBe(945_020);
+    expect(updated?.ageDays).toBe(1);
+  });
+
   it("shows a fetched index price with its age, once refreshed", async () => {
     await refreshTrackedIndices(db, yahooOk); // 2025-08-30 (from the fixed timestamp)
 

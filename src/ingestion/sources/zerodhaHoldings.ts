@@ -5,9 +5,11 @@ import { readCellValue } from "../parseWorkbook";
 import type { ExtractedPosition, ExtractedSnapshot } from "../portfolio/types";
 import type { TrustState } from "../types";
 import {
+  VALIDATION_RULES,
   ZERODHA_AS_ON_PATTERN,
   ZERODHA_COLUMNS,
   ZERODHA_SHEETS,
+  ZERODHA_SUMMARY_LABELS,
   deriveAssetClass,
   normalizeText,
 } from "./mappings";
@@ -82,10 +84,7 @@ function findHeaderRow(worksheet: ExcelJS.Worksheet): HeaderLocation | null {
   return null;
 }
 
-function columnFor(
-  header: HeaderLocation,
-  aliases: readonly string[],
-): number | null {
+function columnFor(header: HeaderLocation, aliases: readonly string[]): number | null {
   for (const alias of aliases) {
     const col = header.columns.get(normalizeText(alias));
     if (col !== undefined) return col;
@@ -93,10 +92,21 @@ function columnFor(
   return null;
 }
 
-function readSummaryValue(worksheet: ExcelJS.Worksheet, label: string): number | null {
+/**
+ * Reads a summary figure from the statement preamble, trying every alias
+ * `ZERODHA_SUMMARY_LABELS` declares for it — the same alias-tolerance
+ * pattern column mapping already uses, so a label is declared once in
+ * `./mappings` and never duplicated here.
+ */
+function readSummaryValue(
+  worksheet: ExcelJS.Worksheet,
+  aliases: readonly string[],
+): number | null {
+  const normalizedAliases = aliases.map(normalizeText);
   for (let row = 1; row <= Math.min(worksheet.rowCount, 25); row += 1) {
     for (let col = 1; col <= Math.min(worksheet.columnCount, 6); col += 1) {
-      if (normalizeText(cellString(worksheet, row, col)) !== normalizeText(label)) continue;
+      if (!normalizedAliases.includes(normalizeText(cellString(worksheet, row, col))))
+        continue;
       const { minorUnits } = parseAmountToMinorUnits(
         readCellValue(worksheet.getRow(row).getCell(col + 1)),
       );
@@ -113,7 +123,9 @@ function parseNumber(raw: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-export function extractZerodhaSheet(worksheet: ExcelJS.Worksheet): ZerodhaSheetResult | null {
+export function extractZerodhaSheet(
+  worksheet: ExcelJS.Worksheet,
+): ZerodhaSheetResult | null {
   const header = findHeaderRow(worksheet);
   if (header === null) return null;
 
@@ -154,14 +166,19 @@ export function extractZerodhaSheet(worksheet: ExcelJS.Worksheet): ZerodhaSheetR
 
     const quantity = parseNumber(cellString(worksheet, row, quantityCol));
     if (quantity === null) {
-      validationIssues.push(`quantity is not numeric: "${cellString(worksheet, row, quantityCol)}"`);
+      validationIssues.push(
+        `quantity is not numeric: "${cellString(worksheet, row, quantityCol)}"`,
+      );
     } else if (quantity < 0) {
       validationIssues.push(`negative quantity: ${quantity}`);
     }
 
     // A broker-flagged discrepancy means the broker itself disputes the
     // holding; it must not be silently trusted.
-    const discrepant = discrepantCol === null ? 0 : (parseNumber(cellString(worksheet, row, discrepantCol)) ?? 0);
+    const discrepant =
+      discrepantCol === null
+        ? 0
+        : (parseNumber(cellString(worksheet, row, discrepantCol)) ?? 0);
     if (discrepant !== 0) {
       validationIssues.push(`broker reports ${discrepant} discrepant units`);
     }
@@ -171,8 +188,12 @@ export function extractZerodhaSheet(worksheet: ExcelJS.Worksheet): ZerodhaSheetR
     // pledged quantity is zero. Rather than guess, a non-zero pledge is
     // flagged for review (D-013).
     const pledged =
-      (pledgedMarginCol === null ? 0 : (parseNumber(cellString(worksheet, row, pledgedMarginCol)) ?? 0)) +
-      (pledgedLoanCol === null ? 0 : (parseNumber(cellString(worksheet, row, pledgedLoanCol)) ?? 0));
+      (pledgedMarginCol === null
+        ? 0
+        : (parseNumber(cellString(worksheet, row, pledgedMarginCol)) ?? 0)) +
+      (pledgedLoanCol === null
+        ? 0
+        : (parseNumber(cellString(worksheet, row, pledgedLoanCol)) ?? 0));
     if (pledged !== 0) {
       validationIssues.push(
         `${pledged} units are pledged; whether pledged units are included in Quantity Available is unconfirmed (D-013)`,
@@ -188,11 +209,16 @@ export function extractZerodhaSheet(worksheet: ExcelJS.Worksheet): ZerodhaSheetR
     // docs/07_FINANCIAL_CALCULATIONS.md ("never accumulated by rounding
     // intermediate values").
     const averagePriceRupees =
-      averagePriceCol === null ? null : parseNumber(cellString(worksheet, row, averagePriceCol));
+      averagePriceCol === null
+        ? null
+        : parseNumber(cellString(worksheet, row, averagePriceCol));
     const closingPrice =
-      closingPriceCol === null ? null : parseAmountToMinorUnits(cellString(worksheet, row, closingPriceCol)).minorUnits;
+      closingPriceCol === null
+        ? null
+        : parseAmountToMinorUnits(cellString(worksheet, row, closingPriceCol)).minorUnits;
 
-    const trustState: TrustState = validationIssues.length === 0 ? "validated" : "needs_review";
+    const trustState: TrustState =
+      validationIssues.length === 0 ? "validated" : "needs_review";
 
     positions.push({
       // ISIN is the stable identity: trading symbols change when a company
@@ -220,8 +246,14 @@ export function extractZerodhaSheet(worksheet: ExcelJS.Worksheet): ZerodhaSheetR
     asOn: findAsOnDate(worksheet),
     positions,
     issues,
-    investedValueMinorUnits: readSummaryValue(worksheet, "Invested Value"),
-    presentValueMinorUnits: readSummaryValue(worksheet, "Present Value"),
+    investedValueMinorUnits: readSummaryValue(
+      worksheet,
+      ZERODHA_SUMMARY_LABELS.investedValue,
+    ),
+    presentValueMinorUnits: readSummaryValue(
+      worksheet,
+      ZERODHA_SUMMARY_LABELS.presentValue,
+    ),
   };
 }
 
@@ -254,7 +286,9 @@ export async function extractZerodhaStatement(
       continue;
     }
     if (!(ZERODHA_SHEETS.ingest as readonly string[]).includes(sheetKey)) {
-      fileIssues.push(`Sheet "${worksheet.name}" is not a recognized holdings sheet and was skipped.`);
+      fileIssues.push(
+        `Sheet "${worksheet.name}" is not a recognized holdings sheet and was skipped.`,
+      );
       continue;
     }
 
@@ -281,9 +315,15 @@ export async function extractZerodhaStatement(
         0,
       );
       const drift = Math.abs(summed - result.investedValueMinorUnits);
-      // Tolerance scales with holding count, since each line's cost basis is
-      // rounded to paise before summing.
-      if (drift > result.positions.length) {
+      // The larger of two tolerances: a fixed floor for the statement's own
+      // rounding of the printed total (VALIDATION_RULES, centralized rather
+      // than a magic number here), and one paise per holding, since each
+      // line's cost basis is independently rounded before summing.
+      const tolerance = Math.max(
+        VALIDATION_RULES.summaryReconciliationToleranceMinorUnits,
+        result.positions.length,
+      );
+      if (drift > tolerance) {
         fileIssues.push(
           `Sheet "${worksheet.name}": line items total ${summed} paise but the statement's Invested Value is ${result.investedValueMinorUnits} paise; some rows may not have been read.`,
         );

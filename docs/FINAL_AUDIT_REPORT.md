@@ -208,6 +208,51 @@ page — no mail service, no PDF service). Every dependency with a cost
 (OpenAI, Anthropic) is opt-in, never defaulted to, and the app is fully
 functional with none of them configured.
 
+## Post-M12 continuation: deferred-decision triage and backlog scan
+
+Per a subsequent autonomous-continuation directive, every remaining
+deferred decision was re-triaged rather than treating "M0–M12 complete"
+as a stopping point:
+
+| Decision | Classification | Outcome |
+|---|---|---|
+| D-016 (Nifty Metal, no free source) | B — implement with free fallback | **Closed.** Added manual entry (`recordManualIndexQuoteAction`) for any index lacking a free source, writing into the same `Valuation` table a fetch would use. This was rung 4 of the fallback hierarchy (reliable free source → free EOD source → locally imported data → manual entry → clearly marked unavailable); rung 5 was already built in M10, rung 4 was not — genuinely missing, now closed. |
+| D-008 (desktop packaging) | C — optional, safe to defer | Documented in `docs/19_OPEN_DECISIONS.md`: Tauri could be built at ₹0, but the existing local web app already satisfies the stated success condition (laptop primary, iPad secondary, both via browser) — building a native packaging toolchain now would be new build-system surface with no functional gain, which is exactly what `CLAUDE.md`'s Cost Philosophy warns against as unnecessary complexity. Not built. |
+| D-006 (brokerage integration) | D/E — requires a user decision | Not resolved autonomously: it requires deciding an authentication flow (API key vs. OAuth-style token) for a real brokerage account, which touches credentials this agent must not guess or request in chat. Raised to the user as the one required question. |
+
+A repository-wide backlog scan (TODOs/FIXMEs, dead code, duplicated
+logic, missing validation) found:
+
+- **No TODO/FIXME/XXX markers anywhere** in `src/`, `tests/`, `prisma/`,
+  or `scripts/`.
+- **A real duplicated-logic defect**: `src/ingestion/sources/mappings.ts`
+  declared `ZERODHA_SUMMARY_LABELS` (alias list for the statement's
+  summary row) and `VALIDATION_RULES.summaryReconciliationToleranceMinorUnits`
+  as the centralized registry the architecture doc requires, but
+  `zerodhaHoldings.ts`'s actual reconciliation check used hardcoded label
+  strings and an ad hoc tolerance instead of either — exactly the
+  "scattered mapping" anti-pattern `docs/09_INGESTION_ARCHITECTURE.md`
+  warns against. Fixed to consume both from the registry; the new
+  tolerance is the *larger* of the old ad hoc one and the registry's
+  fixed floor, so it cannot introduce a new false positive for any
+  currently-passing fixture. All 72 ingestion tests still pass unchanged.
+- **An incidental-ordering risk**: the Settings screen's group order
+  (Budget/Portfolio/Goals/…) matched the declared `OVERRIDE_GROUPS`
+  constant only because of the order rows happened to be pushed in
+  `listOverrideTargets` — the constant itself was never consulted. Fixed
+  to sort explicitly by `OVERRIDE_GROUPS`, with a regression test locking
+  in the guarantee.
+- **`SOURCES`** (`mappings.ts`) remains genuinely unused beyond its own
+  declaration — a documentation-only registry mapping each source id to
+  its reference-file citation. Left as-is rather than force a wiring with
+  no natural call site: it costs nothing, and inventing a consumer for it
+  would be exactly the "don't invent unrelated features" instruction this
+  directive itself gives.
+
+Full regression re-run after these changes: **477 tests total** (373
+unit/integration + 104 E2E across laptop and iPad), typecheck/lint/build
+clean.
+
 ## Outstanding, non-blocking items (by design)
 
 - **D-006**: Brokerage (Zerodha/Kite) and Groww live integrations remain

@@ -235,11 +235,24 @@ source is found. **Not blocking M10**; the market-data layer is designed
 so a missing index source degrades to "no data" (never a guessed number),
 which is the documented, tested behavior for this case.
 
-### D-008: Packaging beyond `pnpm dev`/`pnpm start`
+### D-008: Packaging beyond `pnpm dev`/`pnpm start` — triaged, classified C (M12)
 
 Whether to eventually package as a desktop app (Tauri/Electron) for
-double-click launch is left open (`15_DEPLOYMENT_ARCHITECTURE.md`) — not
-required for v1 and not blocking any milestone.
+double-click launch is left open (`15_DEPLOYMENT_ARCHITECTURE.md`).
+
+Triaged under the post-M12 continuation directive: Tauri is free and
+open-source and could in principle be built at ₹0 mandatory cost, so this
+is not blocked by the cost requirement. It is classified **C — optional
+feature, safe to defer** rather than built now, because the existing
+local web application already satisfies every capability in the stated
+success condition (`CLAUDE.md` §29: laptop as primary device, iPad as
+secondary, both reached via a browser over LAN per
+`15_DEPLOYMENT_ARCHITECTURE.md`) without it. Adding a native packaging
+toolchain (a Rust build per target OS) is new build-system surface with
+no functional gain over `pnpm dev`/`pnpm start` for this project's stated
+scale — exactly the "avoid unnecessary... complex deployment systems"
+instruction in `CLAUDE.md`'s Cost Philosophy. Not required for v1, not
+blocking any milestone, and not built.
 
 ### D-015: Overriding a payer split with more than two payers
 

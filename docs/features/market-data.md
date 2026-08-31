@@ -93,6 +93,25 @@ directly readable, ahead of M11 adding a narrative layer on top of it.
 Exporting is the browser's own print-to-PDF; no PDF library or mail
 service was added.
 
+## Manual entry for an index with no free source (D-016)
+
+Closes the gap between rung 5 (a clearly marked unavailable state — already
+built) and rung 4 (manual entry) of the fallback hierarchy: the Market
+screen's "Manual entry" column, shown only for an index with
+`hasFreeSource: false` (currently only Nifty Metal), lets a reading be
+typed in and recorded via `recordManualIndexQuoteAction`. It writes into
+the same `Valuation` table an automatic fetch uses, tagged
+`source: "manual"`, so the freshness/staleness display treats it exactly
+like a fetched reading — no special case needed. A second entry for the
+same date is refused rather than silently overwriting the first (the same
+non-destructive rule every other source in this project follows).
+
+Deliberately not routed through the M8 manual-adjustment machinery: that
+system exists for a **source value plus an adjustment** with a resulting
+value distinct from both: there is no automatically-fetched Nifty Metal
+reading for a manual one to differ from, so this is the only value, not
+an override of one.
+
 ## Zero-cost verification
 
 | Dependency                   | Cost                               | Required?                                            |

@@ -18,6 +18,7 @@ import {
 import {
   findOverridableField,
   OVERRIDABLE_FIELDS,
+  OVERRIDE_GROUPS,
   WHOLE_IN_BPS,
   type OverridableField,
   type OverrideGroup,
@@ -231,9 +232,13 @@ export async function listOverrideTargets(
     groups.set(target.definition.group, list);
   }
 
-  return [...groups.entries()].map(([group, groupTargets]) => ({
+  // Ordered by OVERRIDE_GROUPS explicitly, not by Map insertion order — the
+  // rows above happen to be pushed in that same order today, but nothing
+  // enforced it, so a reordered or added field could have silently changed
+  // the Settings screen's section order.
+  return OVERRIDE_GROUPS.filter((group) => groups.has(group)).map((group) => ({
     group,
-    targets: groupTargets,
+    targets: groups.get(group) as OverrideTarget[],
   }));
 }
 

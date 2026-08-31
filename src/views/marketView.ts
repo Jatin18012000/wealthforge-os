@@ -18,6 +18,7 @@ import {
  */
 
 export interface IndexRow {
+  readonly instrumentId: string;
   readonly code: string;
   readonly label: string;
   readonly hasFreeSource: boolean;
@@ -60,12 +61,15 @@ export async function getMarketView(db: PrismaClient, asOf: Date): Promise<Marke
 
   const indices: IndexRow[] = [];
   for (const index of TRACKED_INDICES) {
-    const instrumentId = instrumentIdByCode.get(index.code);
-    const latest =
-      instrumentId === undefined ? null : await latestValuation(db, instrumentId);
+    // ensureIndexInstruments always bootstraps one row per tracked index,
+    // so this is never actually undefined — the `as string` below documents
+    // that guarantee rather than silently trusting it.
+    const instrumentId = instrumentIdByCode.get(index.code) as string;
+    const latest = await latestValuation(db, instrumentId);
     const ageDays = latest === null ? null : daysBetween(asOf, latest.asOfDate);
 
     indices.push({
+      instrumentId,
       code: index.code,
       label: index.label,
       hasFreeSource: index.yahooSymbol !== null,

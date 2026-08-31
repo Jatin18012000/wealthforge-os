@@ -469,6 +469,43 @@ test.describe("Market", () => {
     await expect(page.getByText("no free source found (D-016)")).toBeVisible();
   });
 
+  test("records a manual reading for the index with no free source", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/market");
+
+    // A distinct date per project: laptop and ipad share one demo database,
+    // and the same date would collide as "already recorded" between them.
+    const asOf = testInfo.project.name === "ipad" ? "2026-08-27" : "2026-08-29";
+    const metalRow = page.locator("tbody tr", { hasText: "Nifty Metal" });
+    await metalRow.locator('input[name="asOf"]').fill(asOf);
+    await metalRow.locator('input[name="value"]').fill("9450.20");
+    await metalRow.getByRole("button", { name: "Record" }).click();
+
+    await page.waitForURL(/market\?manualQuoteSet=1/);
+    await expect(page.getByText("Manual reading recorded.")).toBeVisible();
+
+    const updatedRow = page.locator("tbody tr", { hasText: "Nifty Metal" });
+    await expect(updatedRow).toContainText("₹9,450");
+  });
+
+  test("refuses a second manual reading for the same index and date", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/market");
+
+    const asOf = testInfo.project.name === "ipad" ? "2026-08-26" : "2026-08-28";
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const metalRow = page.locator("tbody tr", { hasText: "Nifty Metal" });
+      await metalRow.locator('input[name="asOf"]').fill(asOf);
+      await metalRow.locator('input[name="value"]').fill("9400");
+      await metalRow.getByRole("button", { name: "Record" }).click();
+      await page.waitForLoadState("networkidle");
+    }
+
+    await expect(page.getByText(/already recorded/)).toBeVisible();
+  });
+
   test("shows equity/ETF holdings with an editable optional live-price symbol", async ({
     page,
   }) => {

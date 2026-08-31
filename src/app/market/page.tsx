@@ -3,7 +3,7 @@ import { Card, EmptyState } from "../../components/Primitives";
 import { db } from "../../lib/db";
 import { formatDate, formatMoney } from "../../presentation/format";
 import { getMarketView } from "../../views/marketView";
-import { refreshMarketDataAction, setMarketSymbolAction } from "./actions";
+import { recordManualIndexQuoteAction, refreshMarketDataAction, setMarketSymbolAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +47,7 @@ export default async function MarketPage({
       <div className="stack">
         {one("error") !== "" && <p className="alert alert--caution">{one("error")}</p>}
         {one("symbolSet") !== "" && <p className="alert">Symbol saved.</p>}
+        {one("manualQuoteSet") !== "" && <p className="alert">Manual reading recorded.</p>}
         {one("refreshed") !== "" && (
           <p className={one("failed") !== "0" ? "alert alert--caution" : "alert"}>
             <span className="alert__title">Refresh complete.</span> {one("updated")} price
@@ -75,6 +76,7 @@ export default async function MarketPage({
                   </th>
                   <th scope="col">As of</th>
                   <th scope="col">Freshness</th>
+                  <th scope="col">Manual entry</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,11 +108,41 @@ export default async function MarketPage({
                         </span>
                       )}
                     </td>
+                    <td>
+                      {index.hasFreeSource ? (
+                        <span className="note">—</span>
+                      ) : (
+                        <form action={recordManualIndexQuoteAction} className="entry-form">
+                          <input type="hidden" name="instrumentId" value={index.instrumentId} />
+                          <input
+                            className="field__input"
+                            type="date"
+                            name="asOf"
+                            aria-label={`Date for the manually entered ${index.label} level`}
+                          />
+                          <input
+                            className="field__input"
+                            name="value"
+                            inputMode="decimal"
+                            placeholder="e.g. 9450.20"
+                            aria-label={`Manually entered ${index.label} level`}
+                          />
+                          <button type="submit" className="button button--quiet">
+                            Record
+                          </button>
+                        </form>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <p className="note" style={{ marginTop: "0.5rem" }}>
+            An index with no free source (currently only Nifty Metal) can be recorded by hand —
+            the source is labeled &quot;manual&quot; and treated exactly like any other
+            reading for freshness purposes.
+          </p>
         </Card>
 
         <Card title="Mutual funds">
