@@ -305,7 +305,15 @@ async function buildPlannedVsActualAllocation(
 
 // --- Portfolio Growth Decomposition / Contribution vs Return -------------------------------------------------------
 
-async function computePortfolioValueAt(db: PrismaClient, asOf: Date): Promise<Computed<number>> {
+/**
+ * Total valued portfolio (excluding cash) at an arbitrary date.
+ *
+ * Exported so the v1.1 scenario engine (SIP Increase Simulator, Wealth
+ * Projection) can derive an observed growth rate from real history
+ * instead of assuming one — the same rule this file already follows for
+ * every other widget here.
+ */
+export async function computePortfolioValueAt(db: PrismaClient, asOf: Date): Promise<Computed<number>> {
   const view = await getPortfolioView(db, asOf);
   return view.valuation.kind === "ok"
     ? ok(view.valuation.value.totalMinorUnits)

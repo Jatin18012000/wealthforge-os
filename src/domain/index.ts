@@ -150,3 +150,12 @@ export {
   type ScenarioAssumptions,
   type ScenarioResult,
 } from "./insight";
+export {
+  projectFutureValue,
+  monthsUntilTarget,
+  simulateDebtPrepayment,
+  PROJECTION_SEARCH_LIMIT_MONTHS,
+  AMORTIZATION_SEARCH_LIMIT_MONTHS,
+  type FutureValueInput,
+  type DebtAmortizationResult,
+} from "./scenarios";

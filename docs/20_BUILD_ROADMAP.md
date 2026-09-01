@@ -542,5 +542,27 @@ next begins.
   intelligence" section. 5 unit tests (each run twice), 2 E2E tests
   (laptop + iPad, each run twice).
 
+- **IM-06 (Scenario Engine)** — COMPLETE. `src/domain/scenarios.ts`
+  (`projectFutureValue`, `monthsUntilTarget`, `simulateDebtPrepayment` —
+  new, deterministic math; nothing else in the engine already projects a
+  future value or amortizes a loan) + `src/views/scenarioEngineView.ts`
+  (SIP Increase Simulator, Debt Prepayment Simulator, Wealth Projection,
+  Financial Independence Projection). Goal Trade-Off Simulator is named
+  under this module too in the v1.1 directive but was already built in
+  IM-04; not duplicated here. Full rules and rationale in the new
+  `docs/23_SCENARIO_ENGINE.md`. Every growth-rate assumption is an
+  observed `computeCagr` since inception — never an invented market
+  return; where that CAGR is not computable the widget reports
+  insufficient-data. Illustrative comparison points (SIP increase %,
+  prepayment amounts) are explicitly labeled as illustrative, not a
+  recommendation. The Financial Independence Projection's 4%-rule/25x-
+  expense target is disclosed as an external convention in
+  `ScenarioResult.assumptions`, never presented as a project rule. Every
+  scenario carries `SCENARIO_DISCLAIMER` and never mutates a real record
+  (verified by a before/after diff test on the Debt Prepayment
+  Simulator). Wired into the Command Center under a new "Scenario engine"
+  section. 13 domain unit tests + 5 view unit tests (each run twice), 2
+  E2E tests (laptop + iPad, each run twice).
+
 All of the above shipped with full typecheck/lint/unit/E2E coverage per
-milestone (432 unit tests, 130 E2E across both viewports as of IM-05).
+milestone (450 unit tests, 132 E2E across both viewports as of IM-06).

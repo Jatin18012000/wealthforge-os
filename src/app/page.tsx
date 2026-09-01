@@ -23,6 +23,7 @@ import { getCommandCenterView } from "../views/commandCenterView";
 import { listPeriods, resolveAsOf, resolveLatestPeriod } from "../views/context";
 import { getGoalLiabilityIntelligenceView } from "../views/goalLiabilityIntelligenceView";
 import { getInvestmentIntelligenceView } from "../views/investmentIntelligenceView";
+import { getScenarioEngineView } from "../views/scenarioEngineView";
 import { getWealthIntelligenceView } from "../views/wealthIntelligenceView";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +72,7 @@ export default async function CommandCenterPage() {
       : null;
   const goalLiability = await getGoalLiabilityIntelligenceView(db, asOf, latestPeriod);
   const behavioral = await getBehavioralIntelligenceView(db, asOf);
+  const scenarios = await getScenarioEngineView(db, asOf, latestPeriod);
 
   return (
     <>
@@ -1115,6 +1117,149 @@ export default async function CommandCenterPage() {
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            )}
+          </Computed$>
+        </Card>
+
+        <h2>Scenario engine</h2>
+
+        <Card title="SIP increase simulator">
+          <Computed$ result={scenarios.sipIncreaseSimulator.result}>
+            {(scenario) => (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>SIP increase</th>
+                      {[...new Set(scenario.base.map((r) => r.horizonYears))].map((years) => (
+                        <th key={years} className="num">
+                          {years}y
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...new Set(scenario.base.map((r) => r.increaseRatio))].map((ratio) => (
+                      <tr key={ratio}>
+                        <td>{formatRatio(ratio)}</td>
+                        {scenario.base
+                          .filter((r) => r.increaseRatio === ratio)
+                          .map((r) => (
+                            <td key={r.horizonYears} className="num">
+                              <Computed$ result={r.projectedCorpus} showReasons={false}>
+                                {(v) => <>{formatMoney(v)}</>}
+                              </Computed$>
+                            </td>
+                          ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="note" style={{ marginTop: "0.5rem" }}>
+                  Illustrative comparison points, not a recommendation. {scenario.disclaimer}
+                </p>
+              </div>
+            )}
+          </Computed$>
+        </Card>
+
+        <div className="grid grid--halves">
+          <Card title="Debt prepayment simulator">
+            <Computed$ result={scenarios.debtPrepaymentSimulator.result}>
+              {(scenario) => (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Liability</th>
+                        <th className="num">Extra/month</th>
+                        <th className="num">Payoff (months)</th>
+                        <th className="num">Total interest</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scenario.base.map((row) => (
+                        <tr key={`${row.liabilityId}-${row.extraMonthlyMinorUnits}`}>
+                          <td>{row.liabilityName}</td>
+                          <td className="num">{formatMoney(row.extraMonthlyMinorUnits)}</td>
+                          <td className="num">
+                            <Computed$ result={row.result} showReasons={false}>
+                              {(r) => <>{r.monthsToPayoff}</>}
+                            </Computed$>
+                          </td>
+                          <td className="num">
+                            <Computed$ result={row.result} showReasons={false}>
+                              {(r) => <>{formatMoney(r.totalInterestMinorUnits)}</>}
+                            </Computed$>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="note" style={{ marginTop: "0.5rem" }}>
+                    Illustrative extra amounts, not a recommended prepayment. {scenario.disclaimer}
+                  </p>
+                </div>
+              )}
+            </Computed$>
+          </Card>
+
+          <Card title="Wealth projection">
+            <Computed$ result={scenarios.wealthProjection.result}>
+              {(scenario) => (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Horizon</th>
+                        <th className="num">Projected net worth</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scenario.base.map((row) => (
+                        <tr key={row.horizonYears}>
+                          <td>{row.horizonYears} years</td>
+                          <td className="num">
+                            <Computed$ result={row.projectedNetWorth} showReasons={false}>
+                              {(v) => <>{formatMoney(v)}</>}
+                            </Computed$>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="note" style={{ marginTop: "0.5rem" }}>{scenario.disclaimer}</p>
+                </div>
+              )}
+            </Computed$>
+          </Card>
+        </div>
+
+        <Card title="Financial independence projection">
+          <Computed$ result={scenarios.financialIndependenceProjection.result}>
+            {(scenario) => (
+              <div className="table-scroll">
+                <table>
+                  <tbody>
+                    <tr>
+                      <td>FI target (25x annual expense)</td>
+                      <td className="num">{formatMoney(scenario.assumptions.fiTargetMinorUnits as number)}</td>
+                    </tr>
+                    <tr>
+                      <td>Months to reach it</td>
+                      <td className="num">
+                        <Computed$ result={scenario.base} showReasons={false}>
+                          {(months) => <>{months}</>}
+                        </Computed$>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="note" style={{ marginTop: "0.5rem" }}>
+                  Based on the widely-used 4% rule (25x annual expense), not this system&apos;s own
+                  recommendation. {scenario.disclaimer}
+                </p>
               </div>
             )}
           </Computed$>

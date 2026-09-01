@@ -148,6 +148,22 @@ test.describe("Command Center", () => {
       await expect(page.getByRole("heading", { name: heading })).toBeVisible();
     }
   });
+
+  test("shows the scenario engine section (v1.1)", async ({ page }) => {
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { name: "Scenario engine" })).toBeVisible();
+    for (const heading of [
+      "SIP increase simulator",
+      "Debt prepayment simulator",
+      "Wealth projection",
+      "Financial independence projection",
+    ]) {
+      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    }
+    // Every scenario widget carries the standard non-guarantee disclaimer somewhere on the page.
+    await expect(page.getByText(/not a guarantee of future results/i).first()).toBeVisible();
+  });
 });
 
 test.describe("Budget", () => {
