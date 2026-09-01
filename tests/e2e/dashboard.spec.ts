@@ -793,6 +793,22 @@ test.describe("AI Analyst", () => {
     ).toBeVisible();
   });
 
+  test("generates a Daily Brief through the same grounding pipeline (v1.1, IM-07)", async ({
+    page,
+  }) => {
+    await page.goto("/ai-analyst");
+    await expect(page.getByRole("heading", { name: "WealthForge Daily Brief" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Generate daily brief" }).click();
+    await page.waitForURL(/ai-analyst\?brief=/);
+    await page.reload();
+
+    // Same sandbox, same reachability limitation as "Explain this period" —
+    // the Daily Brief goes through the identical AI-unavailable path.
+    await expect(page.getByRole("heading", { name: "AI unavailable" })).toBeVisible();
+    await expect(page.getByText(/could not reach Ollama|needs an API key/)).toBeVisible();
+  });
+
   test("every other screen still works after an AI failure", async ({ page }) => {
     await page.goto("/ai-analyst");
     await page.getByRole("button", { name: "Explain this period" }).click();

@@ -3,22 +3,22 @@
 import { redirect } from "next/navigation";
 import { explainReport, realFetcher, resolveAiProvider, type AiEnv } from "../../ai";
 import { db } from "../../lib/db";
-import { getReport } from "../../views/reportView";
+import { getDailyBriefReport } from "../../views/dailyBriefView";
+import { getReport, type Report } from "../../views/reportView";
 
 /**
- * Requests an explanation of the current report. Every number the model
- * could reference was already computed by the engine (`getReport` reuses
- * the exact same M10 view models the Market/Report screen shows) — the AI
- * never touches the database, a source file, or anything not already in
- * that payload (docs/12_AI_ANALYST_SPEC.md, "grounding architecture").
+ * Requests a grounded explanation of the given report and writes the
+ * outcome (shown / rejected / unavailable) as an audit_event, the same
+ * pattern the Data Center's import/backup/restore actions use, rather
+ * than carrying a potentially-long response through a URL query string.
  *
- * The outcome — success or refusal — is written as an audit_event and the
- * screen is pointed at it by id, the same pattern the Data Center's
- * import/backup/restore actions use, rather than carrying a
- * potentially-long response through a URL query string.
+ * Shared by both AI actions on this screen: the M10/M11 period report
+ * (`explainAction`) and the v1.1 Daily Brief (`explainDailyBriefAction`,
+ * IM-07). Both hand the exact same `Report` shape to `explainReport` — no
+ * number the model could reference is anything the engine did not already
+ * compute (docs/12_AI_ANALYST_SPEC.md, "grounding architecture").
  */
-export async function explainAction(): Promise<void> {
-  const report = await getReport(db);
+async function runGroundedExplanation(report: Report, auditKind: string, redirectParam: string): Promise<never> {
   // process.env structurally matches AiEnv (every field is an optional
   // string) but TypeScript treats its index signature as having no
   // declared properties in common with a plain interface — a safe cast.
@@ -27,7 +27,7 @@ export async function explainAction(): Promise<void> {
   if (provider === null) {
     const event = await db.auditEvent.create({
       data: {
-        kind: "ai_explanation",
+        kind: auditKind,
         payloadJson: JSON.stringify({
           outcome: "unavailable",
           reason:
@@ -35,14 +35,14 @@ export async function explainAction(): Promise<void> {
         }),
       },
     });
-    redirect(`/ai-analyst?event=${event.id}`);
+    redirect(`/ai-analyst?${redirectParam}=${event.id}`);
   }
 
   const result = await explainReport(provider, report);
 
   const event = await db.auditEvent.create({
     data: {
-      kind: "ai_explanation",
+      kind: auditKind,
       payloadJson: JSON.stringify(
         result.kind === "ok"
           ? {
@@ -55,5 +55,25 @@ export async function explainAction(): Promise<void> {
     },
   });
 
-  redirect(`/ai-analyst?event=${event.id}`);
+  redirect(`/ai-analyst?${redirectParam}=${event.id}`);
+}
+
+/**
+ * Requests an explanation of the current M10/M11 report. `getReport`
+ * reuses the exact same view models the Market/Report screen shows.
+ */
+export async function explainAction(): Promise<void> {
+  const report = await getReport(db);
+  await runGroundedExplanation(report, "ai_explanation", "event");
+}
+
+/**
+ * Requests the v1.1 WealthForge Daily Brief (IM-07,
+ * `docs/24_DAILY_BRIEF_SPEC.md`) — the same grounding pipeline, fed a
+ * richer report built from the intelligence layer's own Insight<T>
+ * outputs (`src/views/dailyBriefView.ts`) instead of the M10 report.
+ */
+export async function explainDailyBriefAction(): Promise<void> {
+  const report = await getDailyBriefReport(db);
+  await runGroundedExplanation(report, "ai_daily_brief", "brief");
 }

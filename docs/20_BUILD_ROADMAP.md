@@ -564,5 +564,26 @@ next begins.
   section. 13 domain unit tests + 5 view unit tests (each run twice), 2
   E2E tests (laptop + iPad, each run twice).
 
+- **IM-07 (AI Intelligence — WealthForge Daily Brief)** — COMPLETE.
+  `src/views/dailyBriefView.ts` builds a `Report` (M10's existing
+  `ReportLine`/FACT-INFERENCE-RECOMMENDATION structure, `fact`/
+  `inference`/`recommendation` now exported for reuse) from the v1.1
+  intelligence layer's `Insight<T>` outputs across eight sections —
+  Position, Changes, Why, Deviations, Risks, Goals, Portfolio, Data
+  quality. Every line restates a figure an existing `Insight` already
+  computed; no new calculation. Fed through the completely unchanged M11
+  grounding pipeline (`explainReport`/`checkGrounding` in `src/ai/`) — the
+  AI never independently calculates a figure, and a response asserting a
+  number not present in the report is rejected outright, exactly as
+  before. Surfaced as a second "Generate daily brief" action on the AI
+  Analyst screen (`src/app/ai-analyst/`), sharing one
+  `runGroundedExplanation` helper with the existing "Explain this period"
+  action so the only difference between the two is which `Report` is
+  built. Full spec in the new `docs/24_DAILY_BRIEF_SPEC.md`. IM-08 is
+  expected to move the brief to the top of the redesigned Command Center;
+  deliberately not done here, to keep this milestone scoped to the
+  brief's own construction and grounding. 2 view unit tests (each run
+  twice), 2 E2E tests (laptop + iPad, each run twice).
+
 All of the above shipped with full typecheck/lint/unit/E2E coverage per
-milestone (450 unit tests, 132 E2E across both viewports as of IM-06).
+milestone (452 unit tests, 134 E2E across both viewports as of IM-07).

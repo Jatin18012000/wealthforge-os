@@ -39,13 +39,13 @@ export interface Report {
   readonly sections: readonly ReportSection[];
 }
 
-function fact(text: string): ReportLine {
+export function fact(text: string): ReportLine {
   return { kind: "fact", text };
 }
-function inference(text: string): ReportLine {
+export function inference(text: string): ReportLine {
   return { kind: "inference", text };
 }
-function recommendation(text: string): ReportLine {
+export function recommendation(text: string): ReportLine {
   return { kind: "recommendation", text };
 }
 
