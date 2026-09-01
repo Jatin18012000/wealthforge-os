@@ -170,6 +170,7 @@ export async function loadLiabilities(db: PrismaClient): Promise<LiabilityDetail
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
+    principalMinorUnits: row.principalMinorUnits,
     outstandingMinorUnits:
       adjusted(
         adjustments,

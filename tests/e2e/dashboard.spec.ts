@@ -117,6 +117,22 @@ test.describe("Command Center", () => {
       await expect(page.getByRole("heading", { name: heading })).toBeVisible();
     }
   });
+
+  test("shows the goal & liability intelligence section (v1.1)", async ({ page }) => {
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { name: "Goal & liability intelligence" })).toBeVisible();
+    for (const heading of [
+      "Goal funding radar",
+      "Goal collision detector",
+      "Emergency fund runway",
+      "Debt freedom meter",
+      "EMI release timeline",
+      "Goal trade-off simulator",
+    ]) {
+      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    }
+  });
 });
 
 test.describe("Budget", () => {

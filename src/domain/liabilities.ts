@@ -12,6 +12,7 @@ export interface PayerSplitInput {
 export interface LiabilityDetail {
   readonly id: string;
   readonly name: string;
+  readonly principalMinorUnits: number;
   readonly outstandingMinorUnits: number;
   readonly outstandingAsOf: Date;
   readonly emiAmountMinorUnits: number;

@@ -13,6 +13,7 @@ const AS_OF = new Date("2026-08-31T00:00:00Z");
 const homeLoan = (overrides: Partial<LiabilityDetail> = {}): LiabilityDetail => ({
   id: "l1",
   name: "Home Loan / LAP",
+  principalMinorUnits: 250_000_000,
   outstandingMinorUnits: 237_300_000,
   outstandingAsOf: new Date("2026-08-01T00:00:00Z"),
   emiAmountMinorUnits: 2_841_600,

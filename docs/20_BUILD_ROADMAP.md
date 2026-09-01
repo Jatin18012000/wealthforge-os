@@ -497,5 +497,27 @@ next begins.
   insufficient-data rather than a fabricated figure — this is the honest,
   intended behavior for that data set, not a defect.
 
+- **IM-04 (Goal & Liability Intelligence)** — COMPLETE. `src/views/goalLiabilityIntelligenceView.ts`:
+  Goal Funding Radar, Goal Collision Detector, Emergency Fund Runway, Debt
+  Freedom Meter, EMI Release Timeline, Goal Trade-Off Simulator. Reuses
+  `computeGoalProgress`/`projectGoalCompletion` (the same functions and
+  6-month contribution rate the Goals screen uses), `projectEmiRelease`/
+  `splitEmiByPayer` (the same functions the Liabilities screen uses), and
+  the new IM-01 `buildScenarioResult` for the trade-off simulator. Extended
+  `LiabilityDetail` and `loadLiabilities` with the already-schema-backed
+  `principalMinorUnits` field (Debt Freedom Meter's repaid ratio). Goal
+  Collision Detector identifies when active goals' combined stated-deadline
+  demand exceeds the latest month's unallocated cash — it never decides
+  which goal to sacrifice; the existing fixed priority order remains the
+  only ordering applied. Goal Trade-Off Simulator is a pure, labeled
+  scenario (IM-01's `ScenarioResult<T>` + disclaimer) that reads real data
+  but never writes to any goal or activity record. Emergency Fund Runway
+  always reports insufficient-data: `docs/19_OPEN_DECISIONS.md` D-017
+  records that no essential/discretionary expense split exists in the
+  budget data model, so the widget refuses to substitute total spending
+  for essential spending rather than approximate. Wired into the Command
+  Center under a new "Goal & liability intelligence" section. 6 unit tests
+  (each run twice), 2 E2E tests (laptop + iPad, each run twice).
+
 All of the above shipped with full typecheck/lint/unit/E2E coverage per
-milestone (421 unit tests, 126 E2E across both viewports as of IM-03).
+milestone (427 unit tests, 128 E2E across both viewports as of IM-04).

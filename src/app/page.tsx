@@ -20,6 +20,7 @@ import {
 } from "../presentation/format";
 import { getCommandCenterView } from "../views/commandCenterView";
 import { listPeriods, resolveAsOf, resolveLatestPeriod } from "../views/context";
+import { getGoalLiabilityIntelligenceView } from "../views/goalLiabilityIntelligenceView";
 import { getInvestmentIntelligenceView } from "../views/investmentIntelligenceView";
 import { getWealthIntelligenceView } from "../views/wealthIntelligenceView";
 
@@ -67,6 +68,7 @@ export default async function CommandCenterPage() {
     wealthRange.kind === "ok"
       ? await getInvestmentIntelligenceView(db, wealthRange.value, asOf)
       : null;
+  const goalLiability = await getGoalLiabilityIntelligenceView(db, asOf, latestPeriod);
 
   return (
     <>
@@ -747,6 +749,216 @@ export default async function CommandCenterPage() {
             </div>
           </>
         )}
+
+        <h2>Goal &amp; liability intelligence</h2>
+
+        <Card title="Goal funding radar">
+          <Computed$ result={goalLiability.goalFundingRadar.result}>
+            {(rows) => (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Goal</th>
+                      <th className="num">Current</th>
+                      <th className="num">Target</th>
+                      <th className="num">Progress</th>
+                      <th>Projected completion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.goal.id}>
+                        <td>
+                          {row.goal.name}
+                          {row.progress.isProtected ? " (protected)" : ""}
+                        </td>
+                        <td className="num">{formatMoney(row.progress.currentAmountMinorUnits)}</td>
+                        <td className="num">{formatMoney(row.progress.targetAmountMinorUnits)}</td>
+                        <td className="num">
+                          <Computed$ result={row.progress.progressRatio} showReasons={false}>
+                            {(ratio) => <>{formatRatio(ratio)}</>}
+                          </Computed$>
+                        </td>
+                        <td>
+                          <Computed$ result={row.projection} showReasons={false}>
+                            {(projection) => (
+                              <>
+                                {formatDate(projection.projectedCompletion)}
+                                {projection.missesTargetDate ? " — after target date" : ""}
+                              </>
+                            )}
+                          </Computed$>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Computed$>
+        </Card>
+
+        <div className="grid grid--halves">
+          <Card title="Goal collision detector">
+            <Computed$ result={goalLiability.goalCollisionDetector.result}>
+              {(collision) => (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Goal</th>
+                        <th>Target date</th>
+                        <th className="num">Required/month</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {collision.collidingGoals.map((goal) => (
+                        <tr key={goal.goalId}>
+                          <td>{goal.name}</td>
+                          <td>{formatDate(goal.targetDate)}</td>
+                          <td className="num">{formatMoney(goal.requiredMonthlyMinorUnits)}</td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td>
+                          <strong>Combined demand</strong>
+                        </td>
+                        <td />
+                        <td className="num">
+                          <strong>{formatMoney(collision.totalRequiredMonthlyMinorUnits)}</strong>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Capacity (unallocated cash)</td>
+                        <td />
+                        <td className="num">{formatMoney(collision.monthlyCapacityMinorUnits)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  {collision.shortfallMinorUnits > 0 && (
+                    <p className="note" style={{ marginTop: "0.5rem" }}>
+                      Combined demand exceeds capacity by {formatMoney(collision.shortfallMinorUnits)}/month.
+                      This identifies the conflict only — the existing fixed priority order decides funding
+                      order, not this widget.
+                    </p>
+                  )}
+                </div>
+              )}
+            </Computed$>
+          </Card>
+
+          <Card title="Emergency fund runway">
+            <Computed$ result={goalLiability.emergencyFundRunway.result}>
+              {(runway) => <>{runway.monthsOfRunway} months</>}
+            </Computed$>
+          </Card>
+        </div>
+
+        <div className="grid grid--halves">
+          <Card title="Debt freedom meter">
+            <Computed$ result={goalLiability.debtFreedomMeter.result}>
+              {(meter) => (
+                <div className="table-scroll">
+                  <table>
+                    <tbody>
+                      <tr>
+                        <td>Repaid</td>
+                        <td className="num">{formatRatio(meter.repaidRatio)}</td>
+                      </tr>
+                      <tr>
+                        <td>Outstanding</td>
+                        <td className="num">{formatMoney(meter.totalOutstandingMinorUnits)}</td>
+                      </tr>
+                      <tr>
+                        <td>Projected debt-free date</td>
+                        <td className="num">{formatDate(meter.latestDebtFreeDate)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  {meter.liabilitiesExcluded.length > 0 && (
+                    <p className="note" style={{ marginTop: "0.5rem" }}>
+                      Excluded from the debt-free date (no recorded tenure): {meter.liabilitiesExcluded.join(", ")}.
+                    </p>
+                  )}
+                </div>
+              )}
+            </Computed$>
+          </Card>
+
+          <Card title="EMI release timeline">
+            <Computed$ result={goalLiability.emiReleaseTimeline.result}>
+              {(rows) => (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Liability</th>
+                        <th className="num">Payments made</th>
+                        <th>Projected final payment</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => (
+                        <tr key={row.liability.id}>
+                          <td>{row.liability.name}</td>
+                          <td className="num">
+                            <Computed$ result={row.release} showReasons={false}>
+                              {(release) => <>{release.paymentsMade}</>}
+                            </Computed$>
+                          </td>
+                          <td>
+                            <Computed$ result={row.release} showReasons={false}>
+                              {(release) => (
+                                <>
+                                  {formatDate(release.projectedFinalPayment)}
+                                  {release.fromScheduleOnly ? " (from schedule)" : ""}
+                                </>
+                              )}
+                            </Computed$>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Computed$>
+          </Card>
+        </div>
+
+        <Card title="Goal trade-off simulator">
+          <Computed$ result={goalLiability.goalTradeOffSimulator.result}>
+            {(scenario) => (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Goal</th>
+                      <th className="num">Funding starts (months)</th>
+                      <th className="num">Months to complete</th>
+                      <th>Projected completion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scenario.base.map((row) => (
+                      <tr key={row.goalId}>
+                        <td>{row.name}</td>
+                        <td className="num">{row.monthsUntilFundingStarts}</td>
+                        <td className="num">{row.monthsToComplete}</td>
+                        <td>{formatDate(row.projectedCompletionDate)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="note" style={{ marginTop: "0.5rem" }}>
+                  Scenario — assumes a monthly capacity of{" "}
+                  {formatMoney(scenario.assumptions.monthlyCapacityMinorUnits as number)}. {scenario.disclaimer}
+                </p>
+              </div>
+            )}
+          </Computed$>
+        </Card>
       </div>
     </>
   );

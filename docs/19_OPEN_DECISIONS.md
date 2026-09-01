@@ -281,6 +281,30 @@ anything. **Decision deferred** until a real liability needs it; if raised,
 the likely answer is a "record all shares at once" form rather than a
 single-field override for that case.
 
+### D-017: No essential-expense methodology defined (v1.1, IM-04)
+
+The Emergency Fund Runway widget (`docs/21_INTELLIGENCE_MASTER_PLAN.md`)
+is meant to answer "how many months of essential spending does the
+emergency fund cover" — but the budget's `PlanCategory` (`income |
+expense | investment | emi`, `src/domain/budget.ts`) has no
+essential/discretionary split, and no source document defines one. Using
+the whole `expense` category (or `committedOutflowMinorUnits`, expense +
+EMI) as a stand-in for "essential spending" would silently substitute
+total spending for essential spending — a mislabeling the IM-04 directive
+explicitly forbids, since a household's discretionary spending (dining
+out, entertainment, etc.) is bundled into the same `expense` lines as
+genuinely essential ones (groceries, utilities, rent) with nothing in the
+data model to tell them apart.
+
+**Decision: Emergency Fund Runway reports `insufficient-data` in every
+case** until a real essential/discretionary split exists in the plan
+record model (e.g. a `subcategory` field, or a per-line "essential" flag
+set at import or via manual override) — never approximated from total
+expense. **Deferred**, not blocking IM-04 or v1.1: the widget still
+reports the emergency fund's current balance and target via the existing
+Goal Funding Radar; only the runway ("N months covered") figure is
+gated on this decision.
+
 ## Non-decisions (explicitly out of scope, not "open")
 
 Multi-user support, automatic trade execution, mandatory brokerage
