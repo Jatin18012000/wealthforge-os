@@ -585,5 +585,32 @@ next begins.
   brief's own construction and grounding. 2 view unit tests (each run
   twice), 2 E2E tests (laptop + iPad, each run twice).
 
-All of the above shipped with full typecheck/lint/unit/E2E coverage per
-milestone (452 unit tests, 134 E2E across both viewports as of IM-07).
+- **IM-08 (Command Center 2.0)** — COMPLETE. `src/app/page.tsx`
+  reorganized into the v1.1 directive's exact section order: Daily Brief →
+  tiles → Net Worth Trajectory/Money Flow → Portfolio X-Ray/Risk → Plan vs
+  Reality/Adherence → Goal Radar/EMI Freedom → Wealth Waterfall/Financial
+  Health → What Needs Attention/Data Health → More intelligence →
+  Scenario engine. No view model changed and no widget removed — this
+  milestone is purely a reorganization, verified by an E2E test asserting
+  the eight primary sections' `h2`s appear in strictly increasing vertical
+  position on the page, plus a full-regression test confirming every
+  IM-02–IM-05 widget is still present somewhere. Adds one genuinely new
+  card, "Plan vs reality," exposing `comparePlanVsActual` (M4/M7) on the
+  Command Center for the first time — it was already computed everywhere
+  the Budget screen needed it, just never rendered here. The WealthForge
+  Daily Brief (IM-07) is now generated from the top of the Command Center
+  via a new `explainDailyBriefFromHomeAction` sharing the exact same
+  `runGroundedExplanation` pipeline as the AI Analyst screen's own button
+  (kept, not removed). Retired 4 old per-milestone E2E tests whose target
+  section headings (`Wealth intelligence`, `Investment intelligence`,
+  etc.) no longer exist as literal titles under the new structure; every
+  widget those tests covered is still checked by the new tests. Full spec
+  in the new `docs/25_COMMAND_CENTER_V2_SPEC.md`. All pre-existing
+  Command Center E2E assertions (headline figures, the unexplained
+  position-change surface, the exact "Retained"/"Left over cash" budget
+  text) pass unchanged — their target content was preserved verbatim
+  during the reorder. 3 E2E tests (each run twice, laptop + iPad).
+
+All eight v1.1 milestones (IM-01 through IM-08) are now complete, each
+shipped with full typecheck/lint/unit/E2E coverage in its own session
+(452 unit tests, 132 E2E across both viewports as of IM-08).

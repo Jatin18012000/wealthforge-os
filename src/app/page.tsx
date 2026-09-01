@@ -18,6 +18,7 @@ import {
   formatRatio,
   formatRatioSigned,
 } from "../presentation/format";
+import { explainDailyBriefFromHomeAction } from "./ai-analyst/actions";
 import { getBehavioralIntelligenceView } from "../views/behavioralIntelligenceView";
 import { getCommandCenterView } from "../views/commandCenterView";
 import { listPeriods, resolveAsOf, resolveLatestPeriod } from "../views/context";
@@ -55,7 +56,36 @@ const ADHERENCE_STATUS_LABELS: Record<string, string> = {
   "over-invested": "Over-invested",
 };
 
-export default async function CommandCenterPage() {
+interface AiExplanationPayload {
+  readonly outcome: "shown" | "rejected" | "unavailable";
+  readonly providerName?: string;
+  readonly text?: string;
+  readonly reason?: string;
+}
+
+/**
+ * Command Center 2.0 (v1.1, IM-08, `docs/25_COMMAND_CENTER_V2_SPEC.md`).
+ *
+ * Section order follows the v1.1 directive exactly: Daily Brief → tiles →
+ * Net Worth Trajectory/Money Flow → Portfolio X-Ray/Risk → Plan vs
+ * Reality/Adherence → Goal Radar/EMI Freedom → Wealth Waterfall/Financial
+ * Health → What Needs Attention/Data Health. Every widget below this
+ * point (What's Changed, the Scenario Engine, and the rest of IM-02–IM-06)
+ * is preserved under "More intelligence" — nothing built in IM-01 through
+ * IM-07 was removed, only reordered.
+ */
+export default async function CommandCenterPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const briefId = typeof params.brief === "string" ? params.brief : "";
+  const briefEvent =
+    briefId === "" ? null : await db.auditEvent.findUnique({ where: { id: briefId } });
+  const briefPayload: AiExplanationPayload | null =
+    briefEvent === null ? null : (JSON.parse(briefEvent.payloadJson) as AiExplanationPayload);
+
   const asOf = await resolveAsOf(db);
   const periods = await listPeriods(db);
   const latestPeriod = await resolveLatestPeriod(db);
@@ -85,6 +115,39 @@ export default async function CommandCenterPage() {
       </div>
 
       <div className="stack">
+        <Card title="WealthForge Daily Brief">
+          <p className="note" style={{ marginBottom: "0.6rem" }}>
+            Position, what changed, why, plan deviations, risks, goals, portfolio, and data
+            quality — grounded against the figures below, never invented.
+          </p>
+          <form action={explainDailyBriefFromHomeAction}>
+            <button type="submit" className="button button--primary">
+              Generate daily brief
+            </button>
+          </form>
+          {briefPayload !== null && (
+            <div style={{ marginTop: "0.75rem" }}>
+              {briefPayload.outcome === "shown" ? (
+                <>
+                  <p style={{ whiteSpace: "pre-wrap" }}>{briefPayload.text}</p>
+                  <p className="note" style={{ marginTop: "0.6rem" }}>
+                    Answered by {briefPayload.providerName}. Checked against the report before
+                    being shown.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="alert alert--caution">{briefPayload.reason}</p>
+                  <p className="note">
+                    Every other screen keeps working normally — this feature is optional and
+                    never required.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </Card>
+
         <div className="grid grid--tiles">
           <StatTile
             label="Net worth"
@@ -132,138 +195,9 @@ export default async function CommandCenterPage() {
           />
         </div>
 
-        {view.alerts.length > 0 && (
-          <Card title="Needs attention">
-            <ul className="alert-list">
-              {view.alerts.map((alert) => (
-                <li
-                  key={alert.title}
-                  className={`alert${alert.level === "caution" ? " alert--caution" : ""}`}
-                >
-                  <div>
-                    <span className="alert__title">{alert.title}</span>
-                    <p className="alert__detail">{alert.detail}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-
-        <div className="grid grid--halves">
-          <Card
-            title={
-              view.budget === null
-                ? "This month"
-                : `This month · ${formatPeriodMonth(view.budget.periodMonth)}`
-            }
-            action={<Link href="/budget">Open budget →</Link>}
-          >
-            {view.budget === null ? (
-              <EmptyState>No budget has been imported yet.</EmptyState>
-            ) : (
-              <Computed$ result={view.budget.summary}>
-                {(summary) => (
-                  <div className="table-scroll">
-                    <table>
-                      <tbody>
-                        <tr>
-                          <td>Income</td>
-                          <td className="num">{formatMoney(summary.incomeMinorUnits)}</td>
-                        </tr>
-                        <tr>
-                          <td>Expenses</td>
-                          <td className="num">{formatMoney(summary.expenseMinorUnits)}</td>
-                        </tr>
-                        <tr>
-                          <td>EMIs</td>
-                          <td className="num">{formatMoney(summary.emiMinorUnits)}</td>
-                        </tr>
-                        <tr>
-                          <td>Investments</td>
-                          <td className="num">{formatMoney(summary.investmentMinorUnits)}</td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <strong>Retained</strong>
-                            <br />
-                            <span className="note">income − expenses − EMIs</span>
-                          </td>
-                          <td className="num">
-                            <strong>{formatMoney(summary.retainedMinorUnits)}</strong>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <strong>Left over cash</strong>
-                            <br />
-                            <span className="note">retained − investments</span>
-                          </td>
-                          <td className="num">
-                            <strong>{formatMoney(summary.unallocatedMinorUnits)}</strong>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>Savings rate</td>
-                          <td className="num">
-                            <Computed$ result={summary.savingsRate} showReasons={false}>
-                              {(rate) => <>{formatRatio(rate)}</>}
-                            </Computed$>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <ExclusionList exclusions={summary.exclusions} />
-                  </div>
-                )}
-              </Computed$>
-            )}
-          </Card>
-
-          <Card title="Goals in priority order" action={<Link href="/goals">Open goals →</Link>}>
-            {view.goals.active.length === 0 ? (
-              <EmptyState>No active goals.</EmptyState>
-            ) : (
-              <div className="stack" style={{ gap: "0.85rem" }}>
-                {view.goals.active.map((card) => (
-                  <div key={card.goal.id}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: "0.5rem",
-                        marginBottom: "0.3rem",
-                      }}
-                    >
-                      <span>
-                        {card.goal.priorityRank}. {card.goal.name}{" "}
-                        {card.progress.isProtected && (
-                          <span className="badge badge--accent">Protected</span>
-                        )}
-                      </span>
-                      <span className="note">
-                        {formatMoney(card.progress.currentAmountMinorUnits)} of{" "}
-                        {formatMoney(card.goal.targetAmountMinorUnits)}
-                      </span>
-                    </div>
-                    <ProgressBar
-                      ratio={
-                        card.progress.progressRatio.kind === "ok"
-                          ? card.progress.progressRatio.value
-                          : 0
-                      }
-                      label={`${card.goal.name} progress`}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
-
         {wealth !== null && (
           <>
-            <h2>Wealth intelligence</h2>
+            <h2>Net worth trajectory &amp; money flow</h2>
             <p className="note">Last 6 months, where data exists.</p>
 
             <div className="grid grid--halves">
@@ -352,105 +286,12 @@ export default async function CommandCenterPage() {
                 </Computed$>
               </Card>
             </div>
-
-            <div className="grid grid--halves">
-              <Card title="Savings & investment rate trend">
-                <Computed$ result={wealth.savingsRateTrend.result}>
-                  {(savingsPoints) => (
-                    <Computed$ result={wealth.investmentRateTrend.result}>
-                      {(investmentPoints) => (
-                        <div className="table-scroll">
-                          <table>
-                            <thead>
-                              <tr>
-                                <th scope="col">Month</th>
-                                <th scope="col" className="num">
-                                  Savings rate
-                                </th>
-                                <th scope="col" className="num">
-                                  Investment rate
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {savingsPoints.map((point, index) => (
-                                <tr key={point.periodMonth}>
-                                  <td>{formatPeriodMonth(point.periodMonth)}</td>
-                                  <td className="num">
-                                    {point.value === null ? (
-                                      <span className="note">No data</span>
-                                    ) : (
-                                      formatRatio(point.value)
-                                    )}
-                                  </td>
-                                  <td className="num">
-                                    {investmentPoints[index]?.value == null ? (
-                                      <span className="note">No data</span>
-                                    ) : (
-                                      formatRatio(investmentPoints[index].value as number)
-                                    )}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </Computed$>
-                  )}
-                </Computed$>
-              </Card>
-
-              <Card title="Net worth waterfall">
-                <Computed$ result={wealth.netWorthWaterfall.result}>
-                  {(decomposition) => (
-                    <div className="table-scroll">
-                      <table>
-                        <tbody>
-                          <tr>
-                            <td>Opening net worth</td>
-                            <td className="num">{formatMoney(decomposition.openingMinorUnits)}</td>
-                          </tr>
-                          {decomposition.steps.map((step, index) => (
-                            <tr key={`${step.kind}-${index}`}>
-                              <td>{step.label || DECOMPOSITION_STEP_LABELS[step.kind]}</td>
-                              <td className="num">{formatMoneySigned(step.amountMinorUnits)}</td>
-                            </tr>
-                          ))}
-                          <tr>
-                            <td>
-                              <strong>Closing net worth</strong>
-                            </td>
-                            <td className="num">
-                              <strong>{formatMoney(decomposition.closingMinorUnits)}</strong>
-                            </td>
-                          </tr>
-                          {!decomposition.isComplete && (
-                            <tr>
-                              <td>Unexplained</td>
-                              <td className="num">
-                                {decomposition.unexplainedMinorUnits === null
-                                  ? "—"
-                                  : formatMoneySigned(decomposition.unexplainedMinorUnits)}
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Computed$>
-                <p className="note" style={{ marginTop: "0.5rem" }}>
-                  {wealth.netWorthWaterfall.calculationBasis}
-                </p>
-              </Card>
-            </div>
           </>
         )}
 
         {investment !== null && (
           <>
-            <h2>Investment intelligence</h2>
+            <h2>Portfolio X-Ray &amp; risk</h2>
 
             <Card title="Portfolio X-Ray">
               <Computed$ result={investment.portfolioXRay.result}>
@@ -489,39 +330,6 @@ export default async function CommandCenterPage() {
             </Card>
 
             <div className="grid grid--halves">
-              <Card title="Planned vs actual allocation">
-                <Computed$ result={investment.plannedVsActualAllocation.result}>
-                  {(rows) => (
-                    <div className="table-scroll">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Line</th>
-                            <th className="num">Planned</th>
-                            <th className="num">Held</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.map((row) => (
-                            <tr key={row.label}>
-                              <td>{row.label}</td>
-                              <td className="num">
-                                {row.plannedMinorUnits === null ? "—" : formatMoney(row.plannedMinorUnits)}
-                              </td>
-                              <td className="num">
-                                {row.observedMinorUnits === null ? "—" : formatMoney(row.observedMinorUnits)}
-                              </td>
-                              <td>{ALLOCATION_STATUS_LABELS[row.status]}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Computed$>
-              </Card>
-
               <Card title="Concentration heatmap">
                 <Computed$ result={investment.concentrationHeatmap.result}>
                   {(heatmap) => (
@@ -553,8 +361,597 @@ export default async function CommandCenterPage() {
                   )}
                 </Computed$>
               </Card>
-            </div>
 
+              <Card title="Drawdown monitor">
+                <Computed$ result={investment.drawdownMonitor.result}>
+                  {(d) => (
+                    <div className="table-scroll">
+                      <table>
+                        <tbody>
+                          <tr>
+                            <td>Peak</td>
+                            <td className="num">
+                              {formatMoney(d.peak.valueMinorUnits)} ({formatDate(d.peak.asOf)})
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Trough</td>
+                            <td className="num">
+                              {formatMoney(d.trough.valueMinorUnits)} ({formatDate(d.trough.asOf)})
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Max drawdown</td>
+                            <td className="num">{formatRatioSigned(d.maxDrawdownRatio)}</td>
+                          </tr>
+                          <tr>
+                            <td>Current drawdown</td>
+                            <td className="num">
+                              {formatRatioSigned(d.currentDrawdownRatio)} —{" "}
+                              {d.recovered ? "recovered" : "still below peak"}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Computed$>
+              </Card>
+            </div>
+          </>
+        )}
+
+        <h2>Plan vs reality &amp; adherence</h2>
+
+        <div className="grid grid--halves">
+          <Card
+            title={
+              view.budget === null
+                ? "This month"
+                : `This month · ${formatPeriodMonth(view.budget.periodMonth)}`
+            }
+            action={<Link href="/budget">Open budget →</Link>}
+          >
+            {view.budget === null ? (
+              <EmptyState>No budget has been imported yet.</EmptyState>
+            ) : (
+              <Computed$ result={view.budget.summary}>
+                {(summary) => (
+                  <div className="table-scroll">
+                    <table>
+                      <tbody>
+                        <tr>
+                          <td>Income</td>
+                          <td className="num">{formatMoney(summary.incomeMinorUnits)}</td>
+                        </tr>
+                        <tr>
+                          <td>Expenses</td>
+                          <td className="num">{formatMoney(summary.expenseMinorUnits)}</td>
+                        </tr>
+                        <tr>
+                          <td>EMIs</td>
+                          <td className="num">{formatMoney(summary.emiMinorUnits)}</td>
+                        </tr>
+                        <tr>
+                          <td>Investments</td>
+                          <td className="num">{formatMoney(summary.investmentMinorUnits)}</td>
+                        </tr>
+                        <tr>
+                          <td>
+                            <strong>Retained</strong>
+                            <br />
+                            <span className="note">income − expenses − EMIs</span>
+                          </td>
+                          <td className="num">
+                            <strong>{formatMoney(summary.retainedMinorUnits)}</strong>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>
+                            <strong>Left over cash</strong>
+                            <br />
+                            <span className="note">retained − investments</span>
+                          </td>
+                          <td className="num">
+                            <strong>{formatMoney(summary.unallocatedMinorUnits)}</strong>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>Savings rate</td>
+                          <td className="num">
+                            <Computed$ result={summary.savingsRate} showReasons={false}>
+                              {(rate) => <>{formatRatio(rate)}</>}
+                            </Computed$>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <ExclusionList exclusions={summary.exclusions} />
+                  </div>
+                )}
+              </Computed$>
+            )}
+          </Card>
+
+          <Card title="Plan vs reality">
+            {view.budget === null ? (
+              <EmptyState>No budget has been imported yet.</EmptyState>
+            ) : (
+              <Computed$ result={view.budget.planVsReality}>
+                {(reality) => (
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Category</th>
+                          <th className="num">Planned</th>
+                          <th className="num">Actual</th>
+                          <th className="num">Variance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reality.categories.map((category) => (
+                          <tr key={category.category}>
+                            <td>{category.category}</td>
+                            <td className="num">{formatMoney(category.plannedMinorUnits)}</td>
+                            <td className="num">
+                              {category.actualMinorUnits === null ? (
+                                <span className="note">No data</span>
+                              ) : (
+                                formatMoney(category.actualMinorUnits)
+                              )}
+                            </td>
+                            <td className="num">
+                              {category.varianceMinorUnits === null
+                                ? "—"
+                                : formatMoneySigned(category.varianceMinorUnits)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {reality.hasNoActuals && (
+                      <p className="note" style={{ marginTop: "0.5rem" }}>
+                        No confirmed activity recorded for this month — variances are shown as
+                        uncovered rather than as zero.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </Computed$>
+            )}
+          </Card>
+        </div>
+
+        {investment !== null && (
+          <div className="grid grid--halves">
+            <Card title="Planned vs actual allocation">
+              <Computed$ result={investment.plannedVsActualAllocation.result}>
+                {(rows) => (
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Line</th>
+                          <th className="num">Planned</th>
+                          <th className="num">Held</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row) => (
+                          <tr key={row.label}>
+                            <td>{row.label}</td>
+                            <td className="num">
+                              {row.plannedMinorUnits === null ? "—" : formatMoney(row.plannedMinorUnits)}
+                            </td>
+                            <td className="num">
+                              {row.observedMinorUnits === null ? "—" : formatMoney(row.observedMinorUnits)}
+                            </td>
+                            <td>{ALLOCATION_STATUS_LABELS[row.status]}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Computed$>
+            </Card>
+
+            <Card title="Investment plan adherence">
+              <Computed$ result={investment.planAdherence.result}>
+                {(rows) => (
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Month</th>
+                          <th className="num">Planned</th>
+                          <th className="num">Actual</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row) => (
+                          <tr key={row.periodMonth}>
+                            <td>{formatPeriodMonth(row.periodMonth)}</td>
+                            <td className="num">
+                              {row.plannedMinorUnits === null ? "—" : formatMoney(row.plannedMinorUnits)}
+                            </td>
+                            <td className="num">
+                              {row.actualMinorUnits === null ? "—" : formatMoney(row.actualMinorUnits)}
+                            </td>
+                            <td>{ADHERENCE_STATUS_LABELS[row.status]}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Computed$>
+            </Card>
+          </div>
+        )}
+
+        <h2>Goal radar &amp; EMI freedom</h2>
+
+        <Card title="Goals in priority order" action={<Link href="/goals">Open goals →</Link>}>
+          {view.goals.active.length === 0 ? (
+            <EmptyState>No active goals.</EmptyState>
+          ) : (
+            <div className="stack" style={{ gap: "0.85rem" }}>
+              {view.goals.active.map((card) => (
+                <div key={card.goal.id}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "0.5rem",
+                      marginBottom: "0.3rem",
+                    }}
+                  >
+                    <span>
+                      {card.goal.priorityRank}. {card.goal.name}{" "}
+                      {card.progress.isProtected && (
+                        <span className="badge badge--accent">Protected</span>
+                      )}
+                    </span>
+                    <span className="note">
+                      {formatMoney(card.progress.currentAmountMinorUnits)} of{" "}
+                      {formatMoney(card.goal.targetAmountMinorUnits)}
+                    </span>
+                  </div>
+                  <ProgressBar
+                    ratio={
+                      card.progress.progressRatio.kind === "ok"
+                        ? card.progress.progressRatio.value
+                        : 0
+                    }
+                    label={`${card.goal.name} progress`}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card title="Goal funding radar">
+          <Computed$ result={goalLiability.goalFundingRadar.result}>
+            {(rows) => (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Goal</th>
+                      <th className="num">Current</th>
+                      <th className="num">Target</th>
+                      <th className="num">Progress</th>
+                      <th>Projected completion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.goal.id}>
+                        <td>
+                          {row.goal.name}
+                          {row.progress.isProtected ? " (protected)" : ""}
+                        </td>
+                        <td className="num">{formatMoney(row.progress.currentAmountMinorUnits)}</td>
+                        <td className="num">{formatMoney(row.goal.targetAmountMinorUnits)}</td>
+                        <td className="num">
+                          <Computed$ result={row.progress.progressRatio} showReasons={false}>
+                            {(ratio) => <>{formatRatio(ratio)}</>}
+                          </Computed$>
+                        </td>
+                        <td>
+                          <Computed$ result={row.projection} showReasons={false}>
+                            {(projection) => (
+                              <>
+                                {formatDate(projection.projectedCompletion)}
+                                {projection.missesTargetDate ? " — after target date" : ""}
+                              </>
+                            )}
+                          </Computed$>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Computed$>
+        </Card>
+
+        <div className="grid grid--halves">
+          <Card title="Debt freedom meter">
+            <Computed$ result={goalLiability.debtFreedomMeter.result}>
+              {(meter) => (
+                <div className="table-scroll">
+                  <table>
+                    <tbody>
+                      <tr>
+                        <td>Repaid</td>
+                        <td className="num">{formatRatio(meter.repaidRatio)}</td>
+                      </tr>
+                      <tr>
+                        <td>Outstanding</td>
+                        <td className="num">{formatMoney(meter.totalOutstandingMinorUnits)}</td>
+                      </tr>
+                      <tr>
+                        <td>Projected debt-free date</td>
+                        <td className="num">{formatDate(meter.latestDebtFreeDate)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  {meter.liabilitiesExcluded.length > 0 && (
+                    <p className="note" style={{ marginTop: "0.5rem" }}>
+                      Excluded from the debt-free date (no recorded tenure): {meter.liabilitiesExcluded.join(", ")}.
+                    </p>
+                  )}
+                </div>
+              )}
+            </Computed$>
+          </Card>
+
+          <Card title="EMI release timeline">
+            <Computed$ result={goalLiability.emiReleaseTimeline.result}>
+              {(rows) => (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Liability</th>
+                        <th className="num">Payments made</th>
+                        <th>Projected final payment</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => (
+                        <tr key={row.liability.id}>
+                          <td>{row.liability.name}</td>
+                          <td className="num">
+                            <Computed$ result={row.release} showReasons={false}>
+                              {(release) => <>{release.paymentsMade}</>}
+                            </Computed$>
+                          </td>
+                          <td>
+                            <Computed$ result={row.release} showReasons={false}>
+                              {(release) => (
+                                <>
+                                  {formatDate(release.projectedFinalPayment)}
+                                  {release.fromScheduleOnly ? " (from schedule)" : ""}
+                                </>
+                              )}
+                            </Computed$>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Computed$>
+          </Card>
+        </div>
+
+        <h2>Wealth waterfall &amp; financial health</h2>
+
+        <div className="grid grid--halves">
+          {wealth !== null && (
+            <Card title="Net worth waterfall">
+              <Computed$ result={wealth.netWorthWaterfall.result}>
+                {(decomposition) => (
+                  <div className="table-scroll">
+                    <table>
+                      <tbody>
+                        <tr>
+                          <td>Opening net worth</td>
+                          <td className="num">{formatMoney(decomposition.openingMinorUnits)}</td>
+                        </tr>
+                        {decomposition.steps.map((step, index) => (
+                          <tr key={`${step.kind}-${index}`}>
+                            <td>{step.label || DECOMPOSITION_STEP_LABELS[step.kind]}</td>
+                            <td className="num">{formatMoneySigned(step.amountMinorUnits)}</td>
+                          </tr>
+                        ))}
+                        <tr>
+                          <td>
+                            <strong>Closing net worth</strong>
+                          </td>
+                          <td className="num">
+                            <strong>{formatMoney(decomposition.closingMinorUnits)}</strong>
+                          </td>
+                        </tr>
+                        {!decomposition.isComplete && (
+                          <tr>
+                            <td>Unexplained</td>
+                            <td className="num">
+                              {decomposition.unexplainedMinorUnits === null
+                                ? "—"
+                                : formatMoneySigned(decomposition.unexplainedMinorUnits)}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Computed$>
+              <p className="note" style={{ marginTop: "0.5rem" }}>
+                {wealth.netWorthWaterfall.calculationBasis}
+              </p>
+            </Card>
+          )}
+
+          <Card title="Financial health score">
+            <Computed$ result={behavioral.healthScore.result}>
+              {(score) => (
+                <div className="table-scroll">
+                  <p>
+                    <strong>
+                      {score.totalPoints} / {score.maxPoints}
+                    </strong>
+                  </p>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Component</th>
+                        <th className="num">Points</th>
+                        <th>Why</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {score.components.map((component) => (
+                        <tr key={component.label}>
+                          <td>{component.label}</td>
+                          <td className="num">
+                            {component.points} / {component.maxPoints}
+                          </td>
+                          <td>{component.why}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Computed$>
+          </Card>
+        </div>
+
+        <h2>What needs attention &amp; data health</h2>
+
+        <div className="grid grid--halves">
+          <Card title="Needs attention">
+            {view.alerts.length === 0 ? (
+              <EmptyState>No alerts are currently raised.</EmptyState>
+            ) : (
+              <ul className="alert-list">
+                {view.alerts.map((alert) => (
+                  <li
+                    key={alert.title}
+                    className={`alert${alert.level === "caution" ? " alert--caution" : ""}`}
+                  >
+                    <div>
+                      <span className="alert__title">{alert.title}</span>
+                      <p className="alert__detail">{alert.detail}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card title="Data health">
+            <Computed$ result={behavioral.dataHealth.result}>
+              {(health) => (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Records</th>
+                        <th className="num">Validated/verified</th>
+                        <th className="num">Needs review/rejected</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {health.trustSummaries.map((summary) => (
+                        <tr key={summary.entityType}>
+                          <td>{summary.label}</td>
+                          <td className="num">{summary.counts.validated + summary.counts.verified}</td>
+                          <td className="num">{summary.counts.needs_review + summary.counts.rejected}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="note" style={{ marginTop: "0.5rem" }}>
+                    {health.unexplainedPositionChanges.length} unexplained position change(s).{" "}
+                    {health.stalestPriceAgeDays === null
+                      ? "No priced holding yet."
+                      : `Stalest price is ${health.stalestPriceAgeDays} days old${health.isStale ? " (stale)" : ""}.`}
+                  </p>
+                </div>
+              )}
+            </Computed$>
+          </Card>
+        </div>
+
+        <h2>More intelligence</h2>
+        <p className="note">
+          Everything else built in the v1.1 intelligence layer — not part of the primary
+          section order above, but still one click away.
+        </p>
+
+        {wealth !== null && (
+          <Card title="Savings & investment rate trend">
+            <Computed$ result={wealth.savingsRateTrend.result}>
+              {(savingsPoints) => (
+                <Computed$ result={wealth.investmentRateTrend.result}>
+                  {(investmentPoints) => (
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th scope="col">Month</th>
+                            <th scope="col" className="num">
+                              Savings rate
+                            </th>
+                            <th scope="col" className="num">
+                              Investment rate
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {savingsPoints.map((point, index) => (
+                            <tr key={point.periodMonth}>
+                              <td>{formatPeriodMonth(point.periodMonth)}</td>
+                              <td className="num">
+                                {point.value === null ? (
+                                  <span className="note">No data</span>
+                                ) : (
+                                  formatRatio(point.value)
+                                )}
+                              </td>
+                              <td className="num">
+                                {investmentPoints[index]?.value == null ? (
+                                  <span className="note">No data</span>
+                                ) : (
+                                  formatRatio(investmentPoints[index].value as number)
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Computed$>
+              )}
+            </Computed$>
+          </Card>
+        )}
+
+        {investment !== null && (
+          <>
             <div className="grid grid--halves">
               <Card title="Portfolio growth decomposition">
                 <Computed$ result={investment.growthDecomposition.result}>
@@ -647,44 +1044,6 @@ export default async function CommandCenterPage() {
                 </Computed$>
               </Card>
 
-              <Card title="Drawdown monitor">
-                <Computed$ result={investment.drawdownMonitor.result}>
-                  {(d) => (
-                    <div className="table-scroll">
-                      <table>
-                        <tbody>
-                          <tr>
-                            <td>Peak</td>
-                            <td className="num">
-                              {formatMoney(d.peak.valueMinorUnits)} ({formatDate(d.peak.asOf)})
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>Trough</td>
-                            <td className="num">
-                              {formatMoney(d.trough.valueMinorUnits)} ({formatDate(d.trough.asOf)})
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>Max drawdown</td>
-                            <td className="num">{formatRatioSigned(d.maxDrawdownRatio)}</td>
-                          </tr>
-                          <tr>
-                            <td>Current drawdown</td>
-                            <td className="num">
-                              {formatRatioSigned(d.currentDrawdownRatio)} —{" "}
-                              {d.recovered ? "recovered" : "still below peak"}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Computed$>
-              </Card>
-            </div>
-
-            <div className="grid grid--halves">
               <Card title="Portfolio vs benchmark">
                 <Computed$ result={investment.portfolioVsBenchmark.result}>
                   {(rows) => (
@@ -717,91 +1076,9 @@ export default async function CommandCenterPage() {
                   )}
                 </Computed$>
               </Card>
-
-              <Card title="Investment plan adherence">
-                <Computed$ result={investment.planAdherence.result}>
-                  {(rows) => (
-                    <div className="table-scroll">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Month</th>
-                            <th className="num">Planned</th>
-                            <th className="num">Actual</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.map((row) => (
-                            <tr key={row.periodMonth}>
-                              <td>{formatPeriodMonth(row.periodMonth)}</td>
-                              <td className="num">
-                                {row.plannedMinorUnits === null ? "—" : formatMoney(row.plannedMinorUnits)}
-                              </td>
-                              <td className="num">
-                                {row.actualMinorUnits === null ? "—" : formatMoney(row.actualMinorUnits)}
-                              </td>
-                              <td>{ADHERENCE_STATUS_LABELS[row.status]}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Computed$>
-              </Card>
             </div>
           </>
         )}
-
-        <h2>Goal &amp; liability intelligence</h2>
-
-        <Card title="Goal funding radar">
-          <Computed$ result={goalLiability.goalFundingRadar.result}>
-            {(rows) => (
-              <div className="table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Goal</th>
-                      <th className="num">Current</th>
-                      <th className="num">Target</th>
-                      <th className="num">Progress</th>
-                      <th>Projected completion</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => (
-                      <tr key={row.goal.id}>
-                        <td>
-                          {row.goal.name}
-                          {row.progress.isProtected ? " (protected)" : ""}
-                        </td>
-                        <td className="num">{formatMoney(row.progress.currentAmountMinorUnits)}</td>
-                        <td className="num">{formatMoney(row.progress.targetAmountMinorUnits)}</td>
-                        <td className="num">
-                          <Computed$ result={row.progress.progressRatio} showReasons={false}>
-                            {(ratio) => <>{formatRatio(ratio)}</>}
-                          </Computed$>
-                        </td>
-                        <td>
-                          <Computed$ result={row.projection} showReasons={false}>
-                            {(projection) => (
-                              <>
-                                {formatDate(projection.projectedCompletion)}
-                                {projection.missesTargetDate ? " — after target date" : ""}
-                              </>
-                            )}
-                          </Computed$>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Computed$>
-        </Card>
 
         <div className="grid grid--halves">
           <Card title="Goal collision detector">
@@ -859,78 +1136,6 @@ export default async function CommandCenterPage() {
           </Card>
         </div>
 
-        <div className="grid grid--halves">
-          <Card title="Debt freedom meter">
-            <Computed$ result={goalLiability.debtFreedomMeter.result}>
-              {(meter) => (
-                <div className="table-scroll">
-                  <table>
-                    <tbody>
-                      <tr>
-                        <td>Repaid</td>
-                        <td className="num">{formatRatio(meter.repaidRatio)}</td>
-                      </tr>
-                      <tr>
-                        <td>Outstanding</td>
-                        <td className="num">{formatMoney(meter.totalOutstandingMinorUnits)}</td>
-                      </tr>
-                      <tr>
-                        <td>Projected debt-free date</td>
-                        <td className="num">{formatDate(meter.latestDebtFreeDate)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  {meter.liabilitiesExcluded.length > 0 && (
-                    <p className="note" style={{ marginTop: "0.5rem" }}>
-                      Excluded from the debt-free date (no recorded tenure): {meter.liabilitiesExcluded.join(", ")}.
-                    </p>
-                  )}
-                </div>
-              )}
-            </Computed$>
-          </Card>
-
-          <Card title="EMI release timeline">
-            <Computed$ result={goalLiability.emiReleaseTimeline.result}>
-              {(rows) => (
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Liability</th>
-                        <th className="num">Payments made</th>
-                        <th>Projected final payment</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row) => (
-                        <tr key={row.liability.id}>
-                          <td>{row.liability.name}</td>
-                          <td className="num">
-                            <Computed$ result={row.release} showReasons={false}>
-                              {(release) => <>{release.paymentsMade}</>}
-                            </Computed$>
-                          </td>
-                          <td>
-                            <Computed$ result={row.release} showReasons={false}>
-                              {(release) => (
-                                <>
-                                  {formatDate(release.projectedFinalPayment)}
-                                  {release.fromScheduleOnly ? " (from schedule)" : ""}
-                                </>
-                              )}
-                            </Computed$>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Computed$>
-          </Card>
-        </div>
-
         <Card title="Goal trade-off simulator">
           <Computed$ result={goalLiability.goalTradeOffSimulator.result}>
             {(scenario) => (
@@ -963,8 +1168,6 @@ export default async function CommandCenterPage() {
             )}
           </Computed$>
         </Card>
-
-        <h2>Behavioral &amp; data intelligence</h2>
 
         <div className="grid grid--halves">
           <Card title="What's changed">
@@ -1023,75 +1226,6 @@ export default async function CommandCenterPage() {
                   </ul>
                 )
               }
-            </Computed$>
-          </Card>
-        </div>
-
-        <div className="grid grid--halves">
-          <Card title="Financial health score">
-            <Computed$ result={behavioral.healthScore.result}>
-              {(score) => (
-                <div className="table-scroll">
-                  <p>
-                    <strong>
-                      {score.totalPoints} / {score.maxPoints}
-                    </strong>
-                  </p>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Component</th>
-                        <th className="num">Points</th>
-                        <th>Why</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {score.components.map((component) => (
-                        <tr key={component.label}>
-                          <td>{component.label}</td>
-                          <td className="num">
-                            {component.points} / {component.maxPoints}
-                          </td>
-                          <td>{component.why}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Computed$>
-          </Card>
-
-          <Card title="Data health">
-            <Computed$ result={behavioral.dataHealth.result}>
-              {(health) => (
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Records</th>
-                        <th className="num">Validated/verified</th>
-                        <th className="num">Needs review/rejected</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {health.trustSummaries.map((summary) => (
-                        <tr key={summary.entityType}>
-                          <td>{summary.label}</td>
-                          <td className="num">{summary.counts.validated + summary.counts.verified}</td>
-                          <td className="num">{summary.counts.needs_review + summary.counts.rejected}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <p className="note" style={{ marginTop: "0.5rem" }}>
-                    {health.unexplainedPositionChanges.length} unexplained position change(s).{" "}
-                    {health.stalestPriceAgeDays === null
-                      ? "No priced holding yet."
-                      : `Stalest price is ${health.stalestPriceAgeDays} days old${health.isStale ? " (stale)" : ""}.`}
-                  </p>
-                </div>
-              )}
             </Computed$>
           </Card>
         </div>

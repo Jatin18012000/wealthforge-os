@@ -18,7 +18,12 @@ import { getReport, type Report } from "../../views/reportView";
  * number the model could reference is anything the engine did not already
  * compute (docs/12_AI_ANALYST_SPEC.md, "grounding architecture").
  */
-async function runGroundedExplanation(report: Report, auditKind: string, redirectParam: string): Promise<never> {
+async function runGroundedExplanation(
+  report: Report,
+  auditKind: string,
+  redirectPath: string,
+  redirectParam: string,
+): Promise<never> {
   // process.env structurally matches AiEnv (every field is an optional
   // string) but TypeScript treats its index signature as having no
   // declared properties in common with a plain interface — a safe cast.
@@ -35,7 +40,7 @@ async function runGroundedExplanation(report: Report, auditKind: string, redirec
         }),
       },
     });
-    redirect(`/ai-analyst?${redirectParam}=${event.id}`);
+    redirect(`${redirectPath}?${redirectParam}=${event.id}`);
   }
 
   const result = await explainReport(provider, report);
@@ -55,7 +60,7 @@ async function runGroundedExplanation(report: Report, auditKind: string, redirec
     },
   });
 
-  redirect(`/ai-analyst?${redirectParam}=${event.id}`);
+  redirect(`${redirectPath}?${redirectParam}=${event.id}`);
 }
 
 /**
@@ -64,7 +69,7 @@ async function runGroundedExplanation(report: Report, auditKind: string, redirec
  */
 export async function explainAction(): Promise<void> {
   const report = await getReport(db);
-  await runGroundedExplanation(report, "ai_explanation", "event");
+  await runGroundedExplanation(report, "ai_explanation", "/ai-analyst", "event");
 }
 
 /**
@@ -75,5 +80,16 @@ export async function explainAction(): Promise<void> {
  */
 export async function explainDailyBriefAction(): Promise<void> {
   const report = await getDailyBriefReport(db);
-  await runGroundedExplanation(report, "ai_daily_brief", "brief");
+  await runGroundedExplanation(report, "ai_daily_brief", "/ai-analyst", "brief");
+}
+
+/**
+ * Same Daily Brief, triggered from the Command Center (IM-08 puts it at
+ * the top of the redesigned Command Center per the v1.1 directive's
+ * specified section order) rather than the AI Analyst screen. Identical
+ * pipeline; only the redirect target differs.
+ */
+export async function explainDailyBriefFromHomeAction(): Promise<void> {
+  const report = await getDailyBriefReport(db);
+  await runGroundedExplanation(report, "ai_daily_brief", "/", "brief");
 }

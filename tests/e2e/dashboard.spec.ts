@@ -85,67 +85,73 @@ test.describe("Command Center", () => {
     await expect(page.getByText("retained − investments")).toBeVisible();
   });
 
-  test("shows the wealth intelligence section (v1.1)", async ({ page }) => {
+  test("shows the Command Center 2.0 primary section order (v1.1, IM-08)", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "Wealth intelligence" })).toBeVisible();
+    // The v1.1 directive's exact order: Daily Brief → tiles → Net Worth
+    // Trajectory/Money Flow → Portfolio X-Ray/Risk → Plan vs
+    // Reality/Adherence → Goal Radar/EMI Freedom → Wealth
+    // Waterfall/Financial Health → What Needs Attention/Data Health.
+    const sectionHeadings = [
+      "WealthForge Daily Brief",
+      "Net worth trajectory & money flow",
+      "Portfolio X-Ray & risk",
+      "Plan vs reality & adherence",
+      "Goal radar & EMI freedom",
+      "Wealth waterfall & financial health",
+      "What needs attention & data health",
+    ];
+    const positions: number[] = [];
+    for (const heading of sectionHeadings) {
+      const locator = page.getByRole("heading", { name: heading });
+      await expect(locator).toBeVisible();
+      const box = await locator.boundingBox();
+      positions.push(box?.y ?? -1);
+    }
+    // Every position resolved, and each section appears strictly after the one before it.
+    expect(positions.every((y) => y >= 0)).toBe(true);
+    for (let i = 1; i < positions.length; i += 1) {
+      expect(positions[i]).toBeGreaterThan(positions[i - 1] as number);
+    }
+  });
+
+  test("shows every widget from IM-02–IM-05 somewhere on the redesigned Command Center", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
     for (const heading of [
       "Net worth trajectory",
       "Monthly money flow",
-      "Savings & investment rate trend",
-      "Net worth waterfall",
-    ]) {
-      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-    }
-  });
-
-  test("shows the investment intelligence section (v1.1)", async ({ page }) => {
-    await page.goto("/");
-
-    await expect(page.getByRole("heading", { name: "Investment intelligence" })).toBeVisible();
-    for (const heading of [
       "Portfolio X-Ray",
-      "Planned vs actual allocation",
       "Concentration heatmap",
+      "Drawdown monitor",
+      "Plan vs reality",
+      "Planned vs actual allocation",
+      "Investment plan adherence",
+      "Goals in priority order",
+      "Goal funding radar",
+      "Debt freedom meter",
+      "EMI release timeline",
+      "Net worth waterfall",
+      "Financial health score",
+      "Needs attention",
+      "Data health",
+      "Savings & investment rate trend",
       "Portfolio growth decomposition",
       "Contribution vs return",
       "Portfolio performance",
-      "Drawdown monitor",
       "Portfolio vs benchmark",
-      "Investment plan adherence",
-    ]) {
-      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-    }
-  });
-
-  test("shows the goal & liability intelligence section (v1.1)", async ({ page }) => {
-    await page.goto("/");
-
-    await expect(page.getByRole("heading", { name: "Goal & liability intelligence" })).toBeVisible();
-    for (const heading of [
-      "Goal funding radar",
       "Goal collision detector",
       "Emergency fund runway",
-      "Debt freedom meter",
-      "EMI release timeline",
       "Goal trade-off simulator",
-    ]) {
-      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-    }
-  });
-
-  test("shows the behavioral & data intelligence section (v1.1)", async ({ page }) => {
-    await page.goto("/");
-
-    await expect(page.getByRole("heading", { name: "Behavioral & data intelligence" })).toBeVisible();
-    for (const heading of [
       "What's changed",
       "Financial anomaly detector",
-      "Financial health score",
-      "Data health",
       "Historical coverage",
     ]) {
-      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+      // exact: true — several of these also appear as a substring of one
+      // of the section h2s above (e.g. "Net worth trajectory & money flow").
+      await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
     }
   });
 
@@ -163,6 +169,22 @@ test.describe("Command Center", () => {
     }
     // Every scenario widget carries the standard non-guarantee disclaimer somewhere on the page.
     await expect(page.getByText(/not a guarantee of future results/i).first()).toBeVisible();
+  });
+
+  test("generates the Daily Brief from the top of the redesigned Command Center (v1.1, IM-08)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "WealthForge Daily Brief" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Generate daily brief" }).click();
+    await page.waitForURL(/\/\?brief=/);
+    await page.reload();
+
+    // Same sandbox, same reachability limitation as the AI Analyst screen's
+    // own Daily Brief action — this confirms the Command Center's copy
+    // goes through the identical pipeline, not a separate one.
+    await expect(page.getByText(/could not reach Ollama|needs an API key/)).toBeVisible();
   });
 });
 
