@@ -2,9 +2,18 @@
 
 Personal Financial Operating System
 
-**Status: FINAL RELEASE — v1.0.0**
+**Status: FINAL RELEASE — v1.1.0**
 (ENGINEERING COMPLETE · UI TESTING COMPLETE · RELEASE VERIFIED · LOCAL
 DEPLOYMENT VERIFIED)
+
+v1.1 adds a full **Personal Investment Master intelligence layer** on top
+of the frozen v1.0 financial engine: 31 widgets across wealth, investment,
+goal/liability, behavioral, and scenario intelligence, a WealthForge Daily
+Brief, and a redesigned Command Center 2.0 — every widget a composition
+over the existing engine, never a second calculation path. See
+[`docs/21_INTELLIGENCE_MASTER_PLAN.md`](docs/21_INTELLIGENCE_MASTER_PLAN.md),
+[`docs/22_INTELLIGENCE_WIDGET_CATALOG.md`](docs/22_INTELLIGENCE_WIDGET_CATALOG.md),
+and [`docs/V1.1_RELEASE_NOTES.md`](docs/V1.1_RELEASE_NOTES.md).
 
 WEALTHFORGE OS replaces a manually-maintained Excel budget workbook and
 ad-hoc portfolio tracking with a single local application that ingests the
@@ -45,6 +54,24 @@ detection; manual overrides for every financially significant field
 overwrite); free market-data refresh (AMFI + Yahoo Finance) with a manual
 entry fallback for any instrument with no automatic price; a grounded AI
 Analyst that refuses to state a figure not present in its data.
+
+**v1.1 intelligence layer** (31 widgets, `docs/22_INTELLIGENCE_WIDGET_CATALOG.md`):
+Wealth Intelligence (net worth trajectory, waterfall, money flow, savings
+and investment rate trends); Investment Intelligence (Portfolio X-Ray,
+planned vs actual allocation, growth decomposition, contribution vs
+return, performance/CAGR/XIRR, concentration heatmap, drawdown monitor,
+benchmark comparison, plan adherence); Goal & Liability Intelligence
+(goal funding radar, goal collision detection, debt freedom meter, EMI
+release timeline, goal trade-off simulator); Behavioral & Data
+Intelligence (what's changed, anomaly detector, financial health score,
+data health, historical coverage); a Scenario Engine (SIP increase, debt
+prepayment, wealth projection, and financial-independence simulators,
+each built on the portfolio's or net worth's own observed CAGR — never
+an invented market-return assumption); and a WealthForge Daily Brief that
+narrates all of the above through the same grounded, non-fabricating AI
+pipeline the AI Analyst already uses. Command Center 2.0 reorganizes
+every widget from v1.0 and v1.1 into one page in a fixed, documented
+order (`docs/25_COMMAND_CENTER_V2_SPEC.md`).
 
 ## Architecture summary
 
