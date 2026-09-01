@@ -4,6 +4,36 @@ All notable changes to WEALTHFORGE OS are recorded here. This project
 does not follow a fixed release cadence; entries are grouped by release
 tag.
 
+## [1.1.1] — 2026-09-02
+
+Bounded polish release — "Command Center Personalization & Insight
+Polish." Not a new milestone program; a small set of additive,
+low-risk capabilities on top of the audited v1.1.0 intelligence layer.
+Full detail in
+[`docs/30_V1_1_1_COMMAND_CENTER_POLISH.md`](docs/30_V1_1_1_COMMAND_CENTER_POLISH.md).
+
+### Added
+
+- **Prioritized "What Needs Attention"** (`src/views/attentionView.ts`):
+  a unified Critical/Important/Watch panel aggregating existing
+  Financial Anomaly Detector, concentration, plan-adherence, goal
+  collision, liability, and staleness findings — no new financial fact,
+  no new threshold.
+- **`InsightMeta`** (`src/components/Primitives.tsx`): a freshness badge
+  ("As of ... — data is N days old") plus an expandable "How is this
+  calculated?" note, surfacing each `Insight<T>`'s existing `asOf` and
+  `calculationBasis` on 8 major Command Center widgets.
+
+### Unchanged
+
+- The frozen v1.0.0 financial engine and all of `src/ai/*` — untouched.
+- No new dependency, environment variable, or database migration.
+
+### Verified
+
+- 457 unit tests (452 + 5 new), 136 E2E tests (132 + 2×2 new, laptop +
+  iPad), `tsc`/`eslint`/`next build` all clean.
+
 ## [1.1.0] — 2026-09-01
 
 "Personal Investment Master" intelligence layer, built as eight staged

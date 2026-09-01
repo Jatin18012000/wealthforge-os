@@ -4,6 +4,7 @@ import {
   Computed$,
   EmptyState,
   ExclusionList,
+  InsightMeta,
   MoneyTile,
   ProgressBar,
   StatTile,
@@ -19,6 +20,7 @@ import {
   formatRatioSigned,
 } from "../presentation/format";
 import { explainDailyBriefFromHomeAction } from "./ai-analyst/actions";
+import { buildAttentionPanel, type AttentionItem } from "../views/attentionView";
 import { getBehavioralIntelligenceView } from "../views/behavioralIntelligenceView";
 import { getCommandCenterView } from "../views/commandCenterView";
 import { listPeriods, resolveAsOf, resolveLatestPeriod } from "../views/context";
@@ -55,6 +57,39 @@ const ADHERENCE_STATUS_LABELS: Record<string, string> = {
   "under-invested": "Under-invested",
   "over-invested": "Over-invested",
 };
+
+const ATTENTION_TIER_LABELS: Record<"critical" | "important" | "watch", string> = {
+  critical: "Critical",
+  important: "Important",
+  watch: "Watch",
+};
+
+function AttentionTier({
+  tier,
+  items,
+}: {
+  tier: "critical" | "important" | "watch";
+  items: readonly AttentionItem[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <p className="note" style={{ marginBottom: "0.3rem" }}>
+        <strong>{ATTENTION_TIER_LABELS[tier]}</strong>
+      </p>
+      <ul className="alert-list">
+        {items.map((item, index) => (
+          <li key={`${tier}-${index}`} className={`alert${tier === "watch" ? "" : " alert--caution"}`}>
+            <div>
+              <span className="alert__title">{item.title}</span>
+              <p className="alert__detail">{item.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 interface AiExplanationPayload {
   readonly outcome: "shown" | "rejected" | "unavailable";
@@ -103,6 +138,13 @@ export default async function CommandCenterPage({
   const goalLiability = await getGoalLiabilityIntelligenceView(db, asOf, latestPeriod);
   const behavioral = await getBehavioralIntelligenceView(db, asOf);
   const scenarios = await getScenarioEngineView(db, asOf, latestPeriod);
+
+  const attention = buildAttentionPanel({
+    investment,
+    goalLiability,
+    behavioral,
+    portfolioStalestPriceAgeDays: view.portfolio.stalestPriceAgeDays,
+  });
 
   return (
     <>
@@ -232,9 +274,11 @@ export default async function CommandCenterPage({
                     </div>
                   )}
                 </Computed$>
-                <p className="note" style={{ marginTop: "0.5rem" }}>
-                  {wealth.netWorthTrajectory.calculationBasis}
-                </p>
+                <InsightMeta
+                  asOf={wealth.netWorthTrajectory.asOf}
+                  calculationBasis={wealth.netWorthTrajectory.calculationBasis}
+                  now={view.asOf}
+                />
               </Card>
 
               <Card title="Monthly money flow">
@@ -284,6 +328,11 @@ export default async function CommandCenterPage({
                     </div>
                   )}
                 </Computed$>
+                <InsightMeta
+                  asOf={wealth.moneyFlow.asOf}
+                  calculationBasis={wealth.moneyFlow.calculationBasis}
+                  now={view.asOf}
+                />
               </Card>
             </div>
           </>
@@ -327,6 +376,11 @@ export default async function CommandCenterPage({
                   </div>
                 )}
               </Computed$>
+              <InsightMeta
+                asOf={investment.portfolioXRay.asOf}
+                calculationBasis={investment.portfolioXRay.calculationBasis}
+                now={view.asOf}
+              />
             </Card>
 
             <div className="grid grid--halves">
@@ -680,6 +734,11 @@ export default async function CommandCenterPage({
               </div>
             )}
           </Computed$>
+          <InsightMeta
+            asOf={goalLiability.goalFundingRadar.asOf}
+            calculationBasis={goalLiability.goalFundingRadar.calculationBasis}
+            now={view.asOf}
+          />
         </Card>
 
         <div className="grid grid--halves">
@@ -711,6 +770,11 @@ export default async function CommandCenterPage({
                 </div>
               )}
             </Computed$>
+            <InsightMeta
+              asOf={goalLiability.debtFreedomMeter.asOf}
+              calculationBasis={goalLiability.debtFreedomMeter.calculationBasis}
+              now={view.asOf}
+            />
           </Card>
 
           <Card title="EMI release timeline">
@@ -797,9 +861,11 @@ export default async function CommandCenterPage({
                   </div>
                 )}
               </Computed$>
-              <p className="note" style={{ marginTop: "0.5rem" }}>
-                {wealth.netWorthWaterfall.calculationBasis}
-              </p>
+              <InsightMeta
+                asOf={wealth.netWorthWaterfall.asOf}
+                calculationBasis={wealth.netWorthWaterfall.calculationBasis}
+                now={view.asOf}
+              />
             </Card>
           )}
 
@@ -835,6 +901,11 @@ export default async function CommandCenterPage({
                 </div>
               )}
             </Computed$>
+            <InsightMeta
+              asOf={behavioral.healthScore.asOf}
+              calculationBasis={behavioral.healthScore.calculationBasis}
+              now={view.asOf}
+            />
           </Card>
         </div>
 
@@ -842,22 +913,20 @@ export default async function CommandCenterPage({
 
         <div className="grid grid--halves">
           <Card title="Needs attention">
-            {view.alerts.length === 0 ? (
-              <EmptyState>No alerts are currently raised.</EmptyState>
+            <p className="note" style={{ marginBottom: "0.6rem" }}>
+              Prioritized from the intelligence layer&apos;s own findings — never a fabricated
+              threshold, and never a second calculation of a number computed elsewhere.
+            </p>
+            {attention.isHealthy ? (
+              <EmptyState>
+                No critical, important, or watch items are currently raised.
+              </EmptyState>
             ) : (
-              <ul className="alert-list">
-                {view.alerts.map((alert) => (
-                  <li
-                    key={alert.title}
-                    className={`alert${alert.level === "caution" ? " alert--caution" : ""}`}
-                  >
-                    <div>
-                      <span className="alert__title">{alert.title}</span>
-                      <p className="alert__detail">{alert.detail}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <div className="stack" style={{ gap: "0.75rem" }}>
+                <AttentionTier tier="critical" items={attention.critical} />
+                <AttentionTier tier="important" items={attention.important} />
+                <AttentionTier tier="watch" items={attention.watch} />
+              </div>
             )}
           </Card>
 
@@ -1254,6 +1323,11 @@ export default async function CommandCenterPage({
               </div>
             )}
           </Computed$>
+          <InsightMeta
+            asOf={behavioral.historicalCoverage.asOf}
+            calculationBasis={behavioral.historicalCoverage.calculationBasis}
+            now={view.asOf}
+          />
         </Card>
 
         <h2>Scenario engine</h2>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Computed, Exclusion } from "../domain";
 import {
+  formatDate,
   formatMoney,
   formatPriceAge,
   formatRatio,
@@ -136,6 +137,54 @@ export function FreshnessNote({ days, asOf }: { days: number; asOf: Date }) {
     <span className={days > 7 ? "badge badge--caution" : "badge badge--muted"}>
       {label} · priced {asOf.toISOString().slice(0, 10)}
     </span>
+  );
+}
+
+function daysBetween(from: Date, to: Date): number {
+  return Math.max(0, Math.round((to.getTime() - from.getTime()) / 86_400_000));
+}
+
+/**
+ * Surfaces an `Insight<T>`'s own `asOf` and `calculationBasis` beside the
+ * widget it belongs to — v1.1.1 F3 (freshness) and F10 ("how is this
+ * calculated?"). Both fields already exist on every `Insight<T>`
+ * (`src/domain/insight.ts`, IM-01); this component only renders what the
+ * view-model already computed, never a second freshness system and never
+ * a new explanation the calling widget didn't already state as its own
+ * `calculationBasis`.
+ *
+ * `now` defaults to `asOf` itself (so "as of" and "days old" only differ
+ * when a caller explicitly knows the true present, e.g. the Command
+ * Center's own `asOf`) — never `new Date()`, which would make server-
+ * rendered output non-deterministic between requests.
+ */
+export function InsightMeta({
+  asOf,
+  calculationBasis,
+  now,
+}: {
+  asOf: Date;
+  calculationBasis: string;
+  now?: Date;
+}) {
+  const ageDays = daysBetween(asOf, now ?? asOf);
+  const freshnessLabel =
+    ageDays === 0 ? `As of ${formatDate(asOf)}` : `As of ${formatDate(asOf)} — data is ${formatPriceAge(ageDays)}`;
+
+  return (
+    <div className="note" style={{ marginTop: "0.5rem" }}>
+      <span className={ageDays > 7 ? "badge badge--caution" : "badge badge--muted"}>
+        {freshnessLabel}
+      </span>
+      <details style={{ marginTop: "0.35rem" }}>
+        <summary className="note" style={{ cursor: "pointer" }}>
+          How is this calculated?
+        </summary>
+        <p className="note" style={{ marginTop: "0.3rem" }}>
+          {calculationBasis}
+        </p>
+      </details>
+    </div>
   );
 }
 

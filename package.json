@@ -1,6 +1,6 @@
 {
   "name": "wealthforge-os",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "WEALTHFORGE OS \u2014 local-first personal financial operating system",
   "engines": {

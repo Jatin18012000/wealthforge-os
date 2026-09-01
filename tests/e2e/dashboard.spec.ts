@@ -186,6 +186,33 @@ test.describe("Command Center", () => {
     // goes through the identical pipeline, not a separate one.
     await expect(page.getByText(/could not reach Ollama|needs an API key/)).toBeVisible();
   });
+
+  test("shows the unified attention panel, prioritized into tiers (v1.1.1, F1)", async ({ page }) => {
+    await page.goto("/");
+
+    const attentionCard = page.locator(".card", { hasText: "Needs attention" });
+    await expect(attentionCard).toBeVisible();
+    // The demo fixtures include an unexplained position change, so this is
+    // never healthy on demo data — Critical must actually render, proving
+    // the tiered panel (not just an empty state) is live.
+    await expect(attentionCard.getByText("Critical", { exact: true })).toBeVisible();
+    await expect(
+      attentionCard.getByText("Position changed with no recorded transaction").first(),
+    ).toBeVisible();
+  });
+
+  test("surfaces freshness and a 'how is this calculated?' explanation on major widgets (v1.1.1, F3/F10)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    const xrayCard = page.locator(".card", { hasText: "Portfolio X-Ray" }).first();
+    await expect(xrayCard.getByText(/^As of /)).toBeVisible();
+    const howCalculated = xrayCard.getByText("How is this calculated?");
+    await expect(howCalculated).toBeVisible();
+    await howCalculated.click();
+    await expect(xrayCard.getByText(/getPortfolioView/)).toBeVisible();
+  });
 });
 
 test.describe("Budget", () => {
