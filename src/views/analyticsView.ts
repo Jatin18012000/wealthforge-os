@@ -141,7 +141,7 @@ export async function getAnalyticsView(
  * plan is stated per month and summing several months would compare a
  * multi-month intention against a single point-in-time holding.
  */
-async function buildAllocationComparison(
+export async function buildAllocationComparison(
   db: PrismaClient,
   anchor: Date,
   range: DateRange,

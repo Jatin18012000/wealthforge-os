@@ -16,9 +16,11 @@ import {
   formatMoneySigned,
   formatPeriodMonth,
   formatRatio,
+  formatRatioSigned,
 } from "../presentation/format";
 import { getCommandCenterView } from "../views/commandCenterView";
 import { listPeriods, resolveAsOf, resolveLatestPeriod } from "../views/context";
+import { getInvestmentIntelligenceView } from "../views/investmentIntelligenceView";
 import { getWealthIntelligenceView } from "../views/wealthIntelligenceView";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +37,21 @@ const DECOMPOSITION_STEP_LABELS: Record<string, string> = {
   closing: "Closing net worth",
 };
 
+const ALLOCATION_STATUS_LABELS: Record<string, string> = {
+  matched: "Matched",
+  overweight: "Overweight",
+  underweight: "Underweight",
+  planned_only: "Planned, not yet held",
+  observed_only: "Held, not in plan",
+};
+
+const ADHERENCE_STATUS_LABELS: Record<string, string> = {
+  "insufficient-data": "Insufficient data",
+  exact: "On plan",
+  "under-invested": "Under-invested",
+  "over-invested": "Over-invested",
+};
+
 export default async function CommandCenterPage() {
   const asOf = await resolveAsOf(db);
   const periods = await listPeriods(db);
@@ -45,6 +62,10 @@ export default async function CommandCenterPage() {
   const wealth =
     wealthRange.kind === "ok"
       ? await getWealthIntelligenceView(db, wealthRange.value, asOf)
+      : null;
+  const investment =
+    wealthRange.kind === "ok"
+      ? await getInvestmentIntelligenceView(db, wealthRange.value, asOf)
       : null;
 
   return (
@@ -416,6 +437,312 @@ export default async function CommandCenterPage() {
                 <p className="note" style={{ marginTop: "0.5rem" }}>
                   {wealth.netWorthWaterfall.calculationBasis}
                 </p>
+              </Card>
+            </div>
+          </>
+        )}
+
+        {investment !== null && (
+          <>
+            <h2>Investment intelligence</h2>
+
+            <Card title="Portfolio X-Ray">
+              <Computed$ result={investment.portfolioXRay.result}>
+                {(xray) => (
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Holding</th>
+                          <th>Asset class</th>
+                          <th className="num">Value</th>
+                          <th className="num">Weight</th>
+                          <th className="num">P&L</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {xray.holdings.map((h) => (
+                          <tr key={h.instrumentLabel}>
+                            <td>{h.instrumentLabel}</td>
+                            <td>{h.assetClass}</td>
+                            <td className="num">{formatMoney(h.valueMinorUnits)}</td>
+                            <td className="num">{h.weightRatio === null ? "—" : formatRatio(h.weightRatio)}</td>
+                            <td className="num">
+                              <Computed$ result={h.profitAndLoss} showReasons={false}>
+                                {(pnl) => <>{formatMoneySigned(pnl.absoluteMinorUnits)}</>}
+                              </Computed$>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <ExclusionList exclusions={xray.exclusions} />
+                  </div>
+                )}
+              </Computed$>
+            </Card>
+
+            <div className="grid grid--halves">
+              <Card title="Planned vs actual allocation">
+                <Computed$ result={investment.plannedVsActualAllocation.result}>
+                  {(rows) => (
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Line</th>
+                            <th className="num">Planned</th>
+                            <th className="num">Held</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr key={row.label}>
+                              <td>{row.label}</td>
+                              <td className="num">
+                                {row.plannedMinorUnits === null ? "—" : formatMoney(row.plannedMinorUnits)}
+                              </td>
+                              <td className="num">
+                                {row.observedMinorUnits === null ? "—" : formatMoney(row.observedMinorUnits)}
+                              </td>
+                              <td>{ALLOCATION_STATUS_LABELS[row.status]}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Computed$>
+              </Card>
+
+              <Card title="Concentration heatmap">
+                <Computed$ result={investment.concentrationHeatmap.result}>
+                  {(heatmap) => (
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Instrument</th>
+                            <th className="num">Weight</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {heatmap.byInstrument.map((slice) => (
+                            <tr key={slice.key}>
+                              <td>{slice.key}</td>
+                              <td className="num">
+                                {formatRatio(slice.ratio)}
+                                {slice.ratio > heatmap.concentratedThresholdRatio ? " ⚠" : ""}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <p className="note" style={{ marginTop: "0.5rem" }}>
+                        ⚠ marks a holding above the {formatRatio(heatmap.concentratedThresholdRatio)}{" "}
+                        concentration threshold.
+                      </p>
+                    </div>
+                  )}
+                </Computed$>
+              </Card>
+            </div>
+
+            <div className="grid grid--halves">
+              <Card title="Portfolio growth decomposition">
+                <Computed$ result={investment.growthDecomposition.result}>
+                  {(decomposition) => (
+                    <div className="table-scroll">
+                      <table>
+                        <tbody>
+                          <tr>
+                            <td>Opening value</td>
+                            <td className="num">{formatMoney(decomposition.openingMinorUnits)}</td>
+                          </tr>
+                          {decomposition.steps.map((step, index) => (
+                            <tr key={`${step.kind}-${index}`}>
+                              <td>{step.label || DECOMPOSITION_STEP_LABELS[step.kind]}</td>
+                              <td className="num">{formatMoneySigned(step.amountMinorUnits)}</td>
+                            </tr>
+                          ))}
+                          <tr>
+                            <td>
+                              <strong>Closing value</strong>
+                            </td>
+                            <td className="num">
+                              <strong>{formatMoney(decomposition.closingMinorUnits)}</strong>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Computed$>
+              </Card>
+
+              <Card title="Contribution vs return">
+                <Computed$ result={investment.contributionVsReturn.result}>
+                  {(c) => (
+                    <div className="table-scroll">
+                      <table>
+                        <tbody>
+                          <tr>
+                            <td>Net contribution</td>
+                            <td className="num">{formatMoneySigned(c.netContributionMinorUnits)}</td>
+                          </tr>
+                          <tr>
+                            <td>Market/residual return</td>
+                            <td className="num">{formatMoneySigned(c.returnMinorUnits)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Computed$>
+              </Card>
+            </div>
+
+            <div className="grid grid--halves">
+              <Card title="Portfolio performance">
+                <Computed$ result={investment.performance.result}>
+                  {(perf) => (
+                    <div className="table-scroll">
+                      <table>
+                        <tbody>
+                          <tr>
+                            <td>Profit &amp; loss</td>
+                            <td className="num">
+                              <Computed$ result={perf.aggregatePnl} showReasons={false}>
+                                {(pnl) => <>{formatMoneySigned(pnl.absoluteMinorUnits)}</>}
+                              </Computed$>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>CAGR</td>
+                            <td className="num">
+                              <Computed$ result={perf.cagr} showReasons={false}>
+                                {(cagr) => <>{formatRatioSigned(cagr)}</>}
+                              </Computed$>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>XIRR</td>
+                            <td className="num">
+                              <Computed$ result={perf.xirr} showReasons={false}>
+                                {(xirr) => <>{formatRatioSigned(xirr)}</>}
+                              </Computed$>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Computed$>
+              </Card>
+
+              <Card title="Drawdown monitor">
+                <Computed$ result={investment.drawdownMonitor.result}>
+                  {(d) => (
+                    <div className="table-scroll">
+                      <table>
+                        <tbody>
+                          <tr>
+                            <td>Peak</td>
+                            <td className="num">
+                              {formatMoney(d.peak.valueMinorUnits)} ({formatDate(d.peak.asOf)})
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Trough</td>
+                            <td className="num">
+                              {formatMoney(d.trough.valueMinorUnits)} ({formatDate(d.trough.asOf)})
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Max drawdown</td>
+                            <td className="num">{formatRatioSigned(d.maxDrawdownRatio)}</td>
+                          </tr>
+                          <tr>
+                            <td>Current drawdown</td>
+                            <td className="num">
+                              {formatRatioSigned(d.currentDrawdownRatio)} —{" "}
+                              {d.recovered ? "recovered" : "still below peak"}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Computed$>
+              </Card>
+            </div>
+
+            <div className="grid grid--halves">
+              <Card title="Portfolio vs benchmark">
+                <Computed$ result={investment.portfolioVsBenchmark.result}>
+                  {(rows) => (
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Index</th>
+                            <th className="num">Portfolio return</th>
+                            <th className="num">Index return</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr key={row.indexCode}>
+                              <td>{row.indexLabel}</td>
+                              <td className="num" colSpan={row.result.kind === "ok" ? 1 : 2}>
+                                <Computed$ result={row.result} showReasons={false}>
+                                  {(r) => <>{formatRatioSigned(r.portfolioReturnRatio)}</>}
+                                </Computed$>
+                              </td>
+                              {row.result.kind === "ok" && (
+                                <td className="num">{formatRatioSigned(row.result.value.indexReturnRatio)}</td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Computed$>
+              </Card>
+
+              <Card title="Investment plan adherence">
+                <Computed$ result={investment.planAdherence.result}>
+                  {(rows) => (
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Month</th>
+                            <th className="num">Planned</th>
+                            <th className="num">Actual</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr key={row.periodMonth}>
+                              <td>{formatPeriodMonth(row.periodMonth)}</td>
+                              <td className="num">
+                                {row.plannedMinorUnits === null ? "—" : formatMoney(row.plannedMinorUnits)}
+                              </td>
+                              <td className="num">
+                                {row.actualMinorUnits === null ? "—" : formatMoney(row.actualMinorUnits)}
+                              </td>
+                              <td>{ADHERENCE_STATUS_LABELS[row.status]}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Computed$>
               </Card>
             </div>
           </>

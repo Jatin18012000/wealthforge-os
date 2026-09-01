@@ -98,6 +98,25 @@ test.describe("Command Center", () => {
       await expect(page.getByRole("heading", { name: heading })).toBeVisible();
     }
   });
+
+  test("shows the investment intelligence section (v1.1)", async ({ page }) => {
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { name: "Investment intelligence" })).toBeVisible();
+    for (const heading of [
+      "Portfolio X-Ray",
+      "Planned vs actual allocation",
+      "Concentration heatmap",
+      "Portfolio growth decomposition",
+      "Contribution vs return",
+      "Portfolio performance",
+      "Drawdown monitor",
+      "Portfolio vs benchmark",
+      "Investment plan adherence",
+    ]) {
+      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    }
+  });
 });
 
 test.describe("Budget", () => {

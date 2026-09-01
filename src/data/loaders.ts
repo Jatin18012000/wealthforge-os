@@ -345,3 +345,24 @@ export async function loadValuations(
     priceMinorUnits: row.priceMinorUnits,
   }));
 }
+
+/**
+ * Every distinct date a portfolio position snapshot was actually recorded,
+ * at or before `asOf`, ascending. This is the real observation cadence the
+ * data supports — used so a historical series (e.g. a drawdown monitor)
+ * samples only dates something was actually observed, rather than
+ * fabricating a daily series between two statements
+ * (docs/09_INGESTION_ARCHITECTURE.md, "snapshot ≠ activity").
+ */
+export async function loadDistinctSnapshotDates(
+  db: PrismaClient,
+  asOf: Date,
+): Promise<readonly Date[]> {
+  const rows = await db.positionSnapshot.findMany({
+    where: { asOfDate: { lte: asOf }, supersededById: null },
+    select: { asOfDate: true },
+    distinct: ["asOfDate"],
+    orderBy: { asOfDate: "asc" },
+  });
+  return rows.map((row) => row.asOfDate);
+}

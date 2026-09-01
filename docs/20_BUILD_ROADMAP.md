@@ -447,3 +447,55 @@ added to `tests/domain/budget.test.ts`.
 
 All of the above shipped with full typecheck/lint/unit/E2E coverage per
 commit (388 unit tests, 112 E2E across both viewports as of this section).
+
+---
+
+## v1.1 — Personal Investment Master (Intelligence Layer)
+
+Extends the frozen v1.0 engine with a new intelligence layer per
+`docs/21_INTELLIGENCE_MASTER_PLAN.md`. Staged milestones IM-01 through
+IM-08; each ships with its own audit (typecheck/lint/unit/E2E) before the
+next begins.
+
+- **IM-01 (Intelligence Foundation)** — COMPLETE. `src/domain/insight.ts`:
+  the `Insight<T>` contract, `MetricDefinition`, `AggregateTrust`,
+  `TimeSeriesPoint<T>`/`buildMonthlySeries`, `Decomposition`/
+  `buildDecomposition`, `ScenarioResult<T>`/`buildScenarioResult`. Pure
+  infrastructure, no UI surface. 13 unit tests.
+- **IM-02 (Wealth Intelligence)** — COMPLETE. `src/views/wealthIntelligenceView.ts`:
+  Net Worth Trajectory, Assets vs Liabilities, Net Worth Waterfall,
+  Monthly Money Flow, Savings Rate Trend, Investment Rate Trend. Extracted
+  `computeNetWorthAsOf` out of `commandCenterView.ts` for reuse. Wired into
+  the Command Center. 7 unit tests, 2 E2E tests.
+- **IM-03 (Investment Intelligence)** — COMPLETE. `src/views/investmentIntelligenceView.ts`:
+  Portfolio X-Ray, Planned vs Actual Allocation, Portfolio Growth
+  Decomposition, Contribution vs Return, Portfolio Performance
+  (aggregate P&L, CAGR, XIRR), Concentration Heatmap, Drawdown Monitor,
+  Portfolio vs Benchmark, Investment Plan Adherence. Every widget composes
+  existing domain/view functions (`getPortfolioView`, `comparePlannedAllocation`
+  via a newly-exported `buildAllocationComparison` from `analyticsView.ts`,
+  `computeCagr`, `computeXirr`, `buildDecomposition`) — no new calculation
+  path. Portfolio vs Benchmark reads only the existing `Valuation` table
+  populated by the resolved D-007 market-data layer or manual entry; it
+  never fetches live data itself and reports each tracked index as
+  insufficient when it has no dated observation at both range boundaries
+  (this is the actual, expected state on a fresh install with no market
+  refresh yet — see `docs/18_FAILURE_MODES.md`). One new loader,
+  `loadDistinctSnapshotDates`, added to `src/data/loaders.ts` so the
+  Drawdown Monitor samples only real recorded observation dates, never a
+  fabricated daily series. Wired into the Command Center under a new
+  "Investment intelligence" section. 12 unit tests, 2 E2E tests (laptop +
+  iPad).
+
+  Known data-completeness limitation (recorded in
+  `docs/18_FAILURE_MODES.md`): Growth Decomposition, Contribution vs
+  Return, Portfolio Performance's XIRR, and Investment Plan Adherence all
+  depend on confirmed `buy`/`sip`/`sell` Activity records, which the
+  documented snapshot-import ingestion path never fabricates from an
+  observed quantity change. In the demo data set (snapshot-only, no
+  manually recorded transactions) these widgets correctly report
+  insufficient-data rather than a fabricated figure — this is the honest,
+  intended behavior for that data set, not a defect.
+
+All of the above shipped with full typecheck/lint/unit/E2E coverage per
+milestone (421 unit tests, 126 E2E across both viewports as of IM-03).
