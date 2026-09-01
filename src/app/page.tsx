@@ -18,6 +18,7 @@ import {
   formatRatio,
   formatRatioSigned,
 } from "../presentation/format";
+import { getBehavioralIntelligenceView } from "../views/behavioralIntelligenceView";
 import { getCommandCenterView } from "../views/commandCenterView";
 import { listPeriods, resolveAsOf, resolveLatestPeriod } from "../views/context";
 import { getGoalLiabilityIntelligenceView } from "../views/goalLiabilityIntelligenceView";
@@ -69,6 +70,7 @@ export default async function CommandCenterPage() {
       ? await getInvestmentIntelligenceView(db, wealthRange.value, asOf)
       : null;
   const goalLiability = await getGoalLiabilityIntelligenceView(db, asOf, latestPeriod);
+  const behavioral = await getBehavioralIntelligenceView(db, asOf);
 
   return (
     <>
@@ -955,6 +957,164 @@ export default async function CommandCenterPage() {
                   Scenario — assumes a monthly capacity of{" "}
                   {formatMoney(scenario.assumptions.monthlyCapacityMinorUnits as number)}. {scenario.disclaimer}
                 </p>
+              </div>
+            )}
+          </Computed$>
+        </Card>
+
+        <h2>Behavioral &amp; data intelligence</h2>
+
+        <div className="grid grid--halves">
+          <Card title="What's changed">
+            <Computed$ result={behavioral.whatsChanged.result}>
+              {(changed) => (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Metric</th>
+                        <th className="num">This month</th>
+                        <th className="num">Change</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...changed.budgetVariances, ...changed.activityVariances]
+                        .filter((v) => !v.incomplete)
+                        .map((variance) => (
+                          <tr key={variance.metric}>
+                            <td>{`Δ ${variance.metric}`}</td>
+                            <td className="num">
+                              {variance.currentMinorUnits === null ? "—" : formatMoney(variance.currentMinorUnits)}
+                            </td>
+                            <td className="num">
+                              {variance.absoluteMinorUnits === null
+                                ? "—"
+                                : formatMoneySigned(variance.absoluteMinorUnits)}
+                            </td>
+                          </tr>
+                        ))}
+                      <tr>
+                        <td>Net worth</td>
+                        <td className="num" colSpan={2}>
+                          <Computed$ result={changed.netWorthVariance} showReasons={false}>
+                            {(nw) => <>{formatMoneySigned(nw.deltaMinorUnits)}</>}
+                          </Computed$>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Computed$>
+          </Card>
+
+          <Card title="Financial anomaly detector">
+            <Computed$ result={behavioral.anomalyDetector.result}>
+              {(findings) =>
+                findings.length === 0 ? (
+                  <EmptyState>No anomalies flagged.</EmptyState>
+                ) : (
+                  <ul className="alert-list">
+                    {findings.map((finding, index) => (
+                      <li key={`${finding.kind}-${index}`}>{finding.description}</li>
+                    ))}
+                  </ul>
+                )
+              }
+            </Computed$>
+          </Card>
+        </div>
+
+        <div className="grid grid--halves">
+          <Card title="Financial health score">
+            <Computed$ result={behavioral.healthScore.result}>
+              {(score) => (
+                <div className="table-scroll">
+                  <p>
+                    <strong>
+                      {score.totalPoints} / {score.maxPoints}
+                    </strong>
+                  </p>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Component</th>
+                        <th className="num">Points</th>
+                        <th>Why</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {score.components.map((component) => (
+                        <tr key={component.label}>
+                          <td>{component.label}</td>
+                          <td className="num">
+                            {component.points} / {component.maxPoints}
+                          </td>
+                          <td>{component.why}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Computed$>
+          </Card>
+
+          <Card title="Data health">
+            <Computed$ result={behavioral.dataHealth.result}>
+              {(health) => (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Records</th>
+                        <th className="num">Validated/verified</th>
+                        <th className="num">Needs review/rejected</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {health.trustSummaries.map((summary) => (
+                        <tr key={summary.entityType}>
+                          <td>{summary.label}</td>
+                          <td className="num">{summary.counts.validated + summary.counts.verified}</td>
+                          <td className="num">{summary.counts.needs_review + summary.counts.rejected}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="note" style={{ marginTop: "0.5rem" }}>
+                    {health.unexplainedPositionChanges.length} unexplained position change(s).{" "}
+                    {health.stalestPriceAgeDays === null
+                      ? "No priced holding yet."
+                      : `Stalest price is ${health.stalestPriceAgeDays} days old${health.isStale ? " (stale)" : ""}.`}
+                  </p>
+                </div>
+              )}
+            </Computed$>
+          </Card>
+        </div>
+
+        <Card title="Historical coverage">
+          <Computed$ result={behavioral.historicalCoverage.result}>
+            {(historical) => (
+              <div className="table-scroll">
+                <p>Since {formatDate(historical.inceptionDate)}:</p>
+                <table>
+                  <tbody>
+                    <tr>
+                      <td>Fully covered months</td>
+                      <td className="num">{historical.coverage.monthsCounted.length}</td>
+                    </tr>
+                    <tr>
+                      <td>Partially covered months</td>
+                      <td className="num">{historical.coverage.monthsPartial.length}</td>
+                    </tr>
+                    <tr>
+                      <td>Missing months</td>
+                      <td className="num">{historical.coverage.monthsMissing.length}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             )}
           </Computed$>

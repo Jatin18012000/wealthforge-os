@@ -133,6 +133,21 @@ test.describe("Command Center", () => {
       await expect(page.getByRole("heading", { name: heading })).toBeVisible();
     }
   });
+
+  test("shows the behavioral & data intelligence section (v1.1)", async ({ page }) => {
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { name: "Behavioral & data intelligence" })).toBeVisible();
+    for (const heading of [
+      "What's changed",
+      "Financial anomaly detector",
+      "Financial health score",
+      "Data health",
+      "Historical coverage",
+    ]) {
+      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    }
+  });
 });
 
 test.describe("Budget", () => {

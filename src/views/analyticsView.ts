@@ -199,7 +199,7 @@ async function loadFilterableActivities(db: PrismaClient): Promise<FilterableAct
 }
 
 /** The earliest date any data covers, used for "since inception". */
-async function resolveInceptionDate(db: PrismaClient): Promise<Date | null> {
+export async function resolveInceptionDate(db: PrismaClient): Promise<Date | null> {
   const earliestPlan = await db.planRecord.findFirst({
     where: { supersededById: null },
     orderBy: { periodMonth: "asc" },

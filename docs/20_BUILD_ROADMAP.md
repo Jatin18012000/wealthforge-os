@@ -519,5 +519,28 @@ next begins.
   Center under a new "Goal & liability intelligence" section. 6 unit tests
   (each run twice), 2 E2E tests (laptop + iPad, each run twice).
 
+- **IM-05 (Behavioral & Data Intelligence)** — COMPLETE. `src/views/behavioralIntelligenceView.ts`:
+  What's Changed, Financial Anomaly Detector, Financial Health Score, Data
+  Health, Historical Coverage. Investment Plan Adherence is named under
+  this module too in the v1.1 directive but was already built in IM-03 —
+  not duplicated here. What's Changed uses `comparePeriods`/
+  `computePeriodMetrics` (M7) over calendar-month-aligned ranges (not a
+  rolling 30-day window, which would touch two months without fully
+  covering either) plus `computeNetWorthAsOf`. Financial Anomaly Detector
+  only lists findings the engine already computes elsewhere
+  (`trustStateSummary`'s needs_review/rejected counts, the newly-exported
+  `getUnexplainedPositionChanges` from `commandCenterView.ts`, and each
+  goal's own `computeGoalProgress` anomaly flag) — it introduces no new
+  detection heuristic. Financial Health Score is deliberately scoped to
+  data/process health (trusted-record share, absence of unexplained
+  position changes, absence of goal balance anomalies, price freshness)
+  rather than a financial-adequacy judgment, with every component's point
+  value and reason disclosed in the result. Data Health re-exposes
+  `trustStateSummary` (the same rollup the Data Center shows). Historical
+  Coverage reuses `computePeriodMetrics`'s own `PeriodCoverage` object.
+  Wired into the Command Center under a new "Behavioral & data
+  intelligence" section. 5 unit tests (each run twice), 2 E2E tests
+  (laptop + iPad, each run twice).
+
 All of the above shipped with full typecheck/lint/unit/E2E coverage per
-milestone (427 unit tests, 128 E2E across both viewports as of IM-04).
+milestone (432 unit tests, 130 E2E across both viewports as of IM-05).

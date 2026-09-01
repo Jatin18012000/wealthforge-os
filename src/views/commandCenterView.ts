@@ -15,6 +15,9 @@ import { getGoalsView, type GoalsView } from "./goalsView";
 import { getLiabilitiesView, getPrimaryPayerName, type LiabilitiesView } from "./liabilitiesView";
 import { CASH_ASSET_CLASS, getPortfolioView, type PortfolioView } from "./portfolioView";
 
+/** A price older than this is flagged as stale on the Command Center and counted against Financial Health Score's data-freshness component. */
+export const STALE_AFTER_DAYS = 7;
+
 export type AlertLevel = "caution" | "info";
 
 export interface DashboardAlert {
@@ -189,7 +192,6 @@ async function buildAlerts(
     });
   }
 
-  const STALE_AFTER_DAYS = 7;
   if (portfolio.stalestPriceAgeDays !== null && portfolio.stalestPriceAgeDays > STALE_AFTER_DAYS) {
     alerts.push({
       level: "caution",
@@ -240,41 +242,59 @@ async function buildAlerts(
   return alerts;
 }
 
+export interface UnexplainedPositionChange {
+  readonly instrumentLabel: string;
+  readonly previousQuantity: number;
+  readonly newQuantity: number;
+  readonly reconciled: boolean;
+}
+
 /**
- * Surfaces holdings whose quantity changed with no transaction accounting for
- * it, as recorded by the most recent snapshot import.
+ * Holdings whose quantity changed with no transaction accounting for it, as
+ * recorded by the most recent snapshot import.
  *
  * Ingestion deliberately refuses to invent a trade to explain such a change
- * (docs/09_INGESTION_ARCHITECTURE.md). That decision is only useful if the
- * unexplained change actually reaches the user, which is what this does —
- * otherwise the honesty is buried in an audit log nobody reads.
+ * (docs/09_INGESTION_ARCHITECTURE.md). Exported so both the Command
+ * Center's own alerts and the v1.1 intelligence layer (Financial Anomaly
+ * Detector, Data Health) surface the same underlying finding rather than
+ * re-parsing the audit log a second way.
  */
-async function unexplainedPositionChangeAlerts(
+export async function getUnexplainedPositionChanges(
   db: PrismaClient,
-): Promise<DashboardAlert[]> {
+): Promise<readonly UnexplainedPositionChange[]> {
   const latestImport = await db.auditEvent.findFirst({
     where: { kind: "import", payloadJson: { contains: "portfolioSnapshot" } },
     orderBy: { createdAt: "desc" },
   });
   if (latestImport === null) return [];
 
-  let changes: Array<{ instrumentLabel: string; previousQuantity: number; newQuantity: number; reconciled: boolean }>;
+  let changes: UnexplainedPositionChange[];
   try {
     const payload: unknown = JSON.parse(latestImport.payloadJson);
     const snapshot = (payload as { portfolioSnapshot?: { observedChanges?: unknown } })
       .portfolioSnapshot;
     changes = Array.isArray(snapshot?.observedChanges)
-      ? (snapshot.observedChanges as typeof changes)
+      ? (snapshot.observedChanges as UnexplainedPositionChange[])
       : [];
   } catch {
     return [];
   }
 
-  return changes
-    .filter((change) => !change.reconciled)
-    .map((change) => ({
-      level: "caution" as const,
-      title: `${change.instrumentLabel} changed with no recorded transaction`,
-      detail: `Quantity moved from ${change.previousQuantity} to ${change.newQuantity} between statements. It is reported rather than recorded as a trade — confirm what happened.`,
-    }));
+  return changes.filter((change) => !change.reconciled);
+}
+
+/**
+ * That decision is only useful if the unexplained change actually reaches
+ * the user, which is what this does — otherwise the honesty is buried in
+ * an audit log nobody reads.
+ */
+async function unexplainedPositionChangeAlerts(
+  db: PrismaClient,
+): Promise<DashboardAlert[]> {
+  const changes = await getUnexplainedPositionChanges(db);
+  return changes.map((change) => ({
+    level: "caution" as const,
+    title: `${change.instrumentLabel} changed with no recorded transaction`,
+    detail: `Quantity moved from ${change.previousQuantity} to ${change.newQuantity} between statements. It is reported rather than recorded as a trade — confirm what happened.`,
+  }));
 }
