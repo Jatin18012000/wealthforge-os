@@ -13,7 +13,7 @@ import type {
  * than guessed at, since mapping the wrong column to "quantity" would
  * silently corrupt every holding.
  */
-const COLUMN_ALIASES = {
+export const COLUMN_ALIASES = {
   identifier: [
     "symbol",
     "ticker",
@@ -41,7 +41,7 @@ const UNIT_BY_ASSET_CLASS: Record<PortfolioAssetClass, string> = {
   epf: "rupees",
 };
 
-function findColumn(headers: readonly string[], aliases: readonly string[]): string | null {
+export function findColumn(headers: readonly string[], aliases: readonly string[]): string | null {
   for (const header of headers) {
     if (aliases.includes(header.trim().toLowerCase())) return header;
   }

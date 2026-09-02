@@ -129,6 +129,67 @@ async function main() {
   ]);
   await workbook.xlsx.writeFile(path.join(OUT_DIR, "equity-v9-xlsx-export.xlsx"));
 
+  // v10: a mutual-fund statement in the layout real fund-house exports
+  // actually use — NOT a plain table starting at row 1. It opens with a
+  // personal-details block and a holdings-summary block before the real
+  // header. All names/numbers are fictional (no real PAN, mobile number,
+  // or holder name — see docs/19_OPEN_DECISIONS.md, D-005). Written as raw
+  // rows (not `sheet.columns`) so nothing auto-injects a header at row 1.
+  const mfWorkbook = new ExcelJS.Workbook();
+  const mfSheet = mfWorkbook.addWorksheet("Holdings");
+  mfSheet.addRows([
+    ["Personal Details"],
+    ["Name", "Test Investor"],
+    ["Mobile Number", "9999999999"],
+    ["PAN", "ABCDE1234F"],
+    [],
+    ["HOLDING SUMMARY"],
+    ["Total Invested Value", "375000.00"],
+    ["Total Current Value", "410250.55"],
+    [],
+    ["HOLDINGS AS ON 2026-09-02"],
+    [
+      "Scheme Name",
+      "AMC",
+      "Category",
+      "Sub-category",
+      "Folio No.",
+      "Source",
+      "Units",
+      "Invested Value",
+      "Current Value",
+      "Returns",
+      "XIRR",
+    ],
+    [
+      "Parag Parikh Flexi Cap Fund",
+      "PPFAS Mutual Fund",
+      "Equity",
+      "Flexi Cap",
+      "1234567/89",
+      "Direct",
+      1250.456,
+      85000.0,
+      95210.3,
+      10210.3,
+      "12.4%",
+    ],
+    [
+      "UTI Nifty 50 Index Fund",
+      "UTI Mutual Fund",
+      "Equity",
+      "Index",
+      "9876543/21",
+      "Direct",
+      2100.1,
+      290000.0,
+      315040.25,
+      25040.25,
+      "9.8%",
+    ],
+  ]);
+  await mfWorkbook.xlsx.writeFile(path.join(OUT_DIR, "mutualfund-v2-real-layout.xlsx"));
+
   console.log("Generated portfolio fixtures in", OUT_DIR);
 }
 

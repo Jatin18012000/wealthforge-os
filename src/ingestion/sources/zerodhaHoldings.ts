@@ -41,10 +41,21 @@ function cellString(worksheet: ExcelJS.Worksheet, row: number, col: number): str
   return value === null ? "" : String(value).trim();
 }
 
-/** True when this workbook looks like a Zerodha holdings statement. */
+/**
+ * True when this workbook looks like a Zerodha holdings statement.
+ *
+ * Requires BOTH the "…as on YYYY-MM-DD" title AND the Symbol+ISIN header
+ * row on the same sheet — the date phrase alone is not distinctive enough:
+ * a real fund-house mutual-fund export observed in owner UAT independently
+ * carries its own "HOLDINGS AS ON <date>" title with a completely
+ * different column layout (Scheme Name/AMC/Units/…, no Symbol or ISIN at
+ * all), and matching on the date phrase alone misrouted that file into
+ * this adapter, which then found no header and produced zero holdings —
+ * never falling through to the generic parser that could actually read it.
+ */
 export function detectZerodhaStatement(workbook: ExcelJS.Workbook): boolean {
   for (const worksheet of workbook.worksheets) {
-    if (findAsOnDate(worksheet) !== null) return true;
+    if (findAsOnDate(worksheet) !== null && findHeaderRow(worksheet) !== null) return true;
   }
   return false;
 }

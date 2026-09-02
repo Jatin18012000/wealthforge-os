@@ -2,7 +2,7 @@ import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { expectOk, valuePortfolio } from "../../src/domain";
 import { loadPositionsAsOf, loadValuations } from "../../src/data/loaders";
-import { importPortfolioSnapshot, parseCsv } from "../../src/ingestion/portfolio";
+import { findHeaderRowIndex, importPortfolioSnapshot, parseCsv } from "../../src/ingestion/portfolio";
 import { createTestDb } from "../setup/testDb";
 
 const FIXTURES = path.resolve(__dirname, "../fixtures/portfolio");
@@ -31,6 +31,63 @@ describe("CSV parsing", () => {
 
   it("does not emit a phantom row for a trailing newline", () => {
     expect(parseCsv("a,b\n1,2\n")).toHaveLength(2);
+  });
+});
+
+describe("header row detection", () => {
+  it("finds the header at row 0 when the file is already a plain table", () => {
+    const grid = [
+      ["Symbol", "Name", "Quantity", "LTP"],
+      ["INFY", "Infosys Ltd", "50", "1520.40"],
+    ];
+    expect(findHeaderRowIndex(grid)).toBe(0);
+  });
+
+  it("finds the header past a multi-row personal-details and summary preamble", () => {
+    const grid = [
+      ["Personal Details"],
+      ["Name", "Test Investor"],
+      ["Mobile Number", "9999999999"],
+      ["PAN", "ABCDE1234F"],
+      [],
+      ["HOLDING SUMMARY"],
+      ["Total Invested Value", "375000.00"],
+      [],
+      ["HOLDINGS AS ON 2026-09-02"],
+      ["Scheme Name", "AMC", "Category", "Folio No.", "Units", "Invested Value"],
+      ["Parag Parikh Flexi Cap Fund", "PPFAS Mutual Fund", "Equity", "1234567/89", "1250.456", "85000.00"],
+    ];
+    expect(findHeaderRowIndex(grid)).toBe(9);
+  });
+
+  it("does not mistake a preamble label row for a header — both an identity AND a quantity column are required", () => {
+    // "Name" alone (no quantity column on the same row) must not be
+    // accepted as the header, or every downstream column mapping would be
+    // built against a row that isn't actually one.
+    const grid = [
+      ["Name", "Test Investor"],
+      ["HOLDING SUMMARY"],
+      ["Total Invested Value", "375000.00"],
+    ];
+    expect(findHeaderRowIndex(grid)).toBeNull();
+  });
+
+  it("returns null (never guesses) when no recognizable header exists within the search bound", () => {
+    const grid = [
+      ["Symbol", "Name", "Notes"],
+      ["INFY", "Infosys Ltd", "some note"],
+    ];
+    expect(findHeaderRowIndex(grid)).toBeNull();
+  });
+
+  it("gives up past the search bound rather than scanning an entire malformed file", () => {
+    const preamble = Array.from({ length: 60 }, (_, i) => [`junk row ${i}`]);
+    const grid = [
+      ...preamble,
+      ["Scheme Name", "Units"],
+      ["Some Fund", "100"],
+    ];
+    expect(findHeaderRowIndex(grid)).toBeNull();
   });
 });
 
@@ -311,6 +368,36 @@ describe("portfolio snapshot ingestion", () => {
       where: { instrumentId: infosys.id },
     });
     expect(position.quantity).toBe(50);
+  });
+
+  it("locates the real mutual-fund statement's holdings header past a personal-details and summary preamble", async () => {
+    const audit = await importPortfolioSnapshot(
+      db,
+      fixture("mutualfund-v2-real-layout.xlsx"),
+      { asOf: SEP_30, assetClass: "mutual_fund" },
+    );
+
+    // Zero would mean the header-row bug reproduced; both real holdings must
+    // be found past the "Personal Details"/"HOLDING SUMMARY" preamble.
+    expect(audit.rowsScanned).toBe(2);
+    expect(audit.positionsCreated).toBe(2);
+    expect(audit.issues.some((issue) => issue.includes("no recognizable"))).toBe(false);
+
+    const fund = await db.instrument.findFirstOrThrow({
+      where: { identifier: "Parag Parikh Flexi Cap Fund" },
+    });
+    const position = await db.positionSnapshot.findFirstOrThrow({
+      where: { instrumentId: fund.id },
+    });
+
+    // Fractional units survive, and the reported Invested Value is used
+    // verbatim as the cost basis — never fabricated, never recomputed.
+    expect(position.quantity).toBeCloseTo(1250.456, 6);
+    expect(position.costBasisMinorUnits).toBe(85_000 * 100);
+    // This export carries no NAV/price column at all — price must be
+    // absent, never guessed at.
+    expect(await db.valuation.count({ where: { instrumentId: fund.id } })).toBe(0);
+    expect(position.trustState).toBe("validated");
   });
 
   it("feeds the valuation engine, which values the portfolio from imported data", async () => {

@@ -18,6 +18,7 @@ actual Zerodha/Groww exports.
 | `equity-v7-unusable-layout.csv` | No recognizable quantity column — import writes nothing |
 | `mutualfund-v1-base.csv` | MF units and NAV with an invested total instead of average cost |
 | `equity-v9-xlsx-export.xlsx` | The same equity holdings as XLSX rather than CSV |
+| `mutualfund-v2-real-layout.xlsx` | The real MF-statement layout observed in owner UAT: a Personal Details block and a HOLDING SUMMARY block precede the actual holdings header — no real name/PAN/mobile number, all fictional (D-005) |
 
 Regenerate with:
 
