@@ -4,7 +4,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { hashBuffer } from "../parseWorkbook";
 import { extractZerodhaStatement } from "../sources/zerodhaHoldings";
 import { extractSnapshot, type NormalizeOptions } from "./normalizeSnapshot";
-import { parseSnapshotFile } from "./parseSnapshot";
+import { findGenericHoldingsAsOnDate, parseSnapshotFile } from "./parseSnapshot";
 import type {
   ExtractedPosition,
   ExtractedSnapshot,
@@ -194,8 +194,29 @@ async function resolveSnapshot(
     return { ...zerodha, asOf: statementDate ?? (options.asOf as Date) };
   }
 
-  // Generic tabular export: the file states no date, so the caller must.
-  if (options.asOf === undefined || options.assetClass === undefined) {
+  // Generic tabular export: most state no date at all, but a real
+  // mutual-fund statement's preamble carries an explicit "HOLDINGS AS ON
+  // YYYY-MM-DD" title — read it when present, exactly like the Zerodha
+  // branch above reads its own "…as on…" title, rather than forcing the
+  // caller to re-supply a date the file already states.
+  const detectedAsOf = await findGenericHoldingsAsOnDate(filePath);
+
+  // Same D-011 stance as the Zerodha branch above: a disagreement between
+  // the statement's own date and an explicitly supplied one is fatal
+  // rather than silently resolved either way.
+  if (
+    detectedAsOf !== null &&
+    options.asOf !== undefined &&
+    detectedAsOf.getTime() !== options.asOf.getTime()
+  ) {
+    throw new Error(
+      `${fileName}: the statement is dated ${detectedAsOf.toISOString().slice(0, 10)} but ${options.asOf.toISOString().slice(0, 10)} was supplied. Refusing to import rather than misdate the portfolio.`,
+    );
+  }
+
+  const resolvedAsOf = options.asOf ?? detectedAsOf ?? undefined;
+
+  if (resolvedAsOf === undefined || options.assetClass === undefined) {
     throw new Error(
       `${fileName}: this layout states neither an as-of date nor an asset class, so both must be supplied explicitly.`,
     );
@@ -208,7 +229,7 @@ async function resolveSnapshot(
   // already gets it by construction (extractZerodhaStatement is called with
   // `fileName` directly).
   return {
-    ...extractSnapshot(raw, { asOf: options.asOf, assetClass: options.assetClass }),
+    ...extractSnapshot(raw, { asOf: resolvedAsOf, assetClass: options.assetClass }),
     fileName,
   };
 }

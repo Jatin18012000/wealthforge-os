@@ -17,6 +17,23 @@ import type { RawSnapshotFile, RawSnapshotRow } from "./types";
  */
 const HEADER_SEARCH_LIMIT_ROWS = 50;
 
+/** Matches the literal "HOLDINGS AS ON YYYY-MM-DD" metadata phrase a real
+ * mutual-fund statement's preamble carries — deliberately distinct from,
+ * and never shared with, `../sources/mappings.ts`'s more permissive
+ * `ZERODHA_AS_ON_PATTERN` (`/as on\s+.../i`, no "HOLDINGS" requirement, no
+ * word boundaries). Requiring the full "HOLDINGS AS ON" phrase, anchored
+ * with `\b`, means this never fires on a bare date-looking cell and never
+ * competes with Zerodha's own, separately-scoped detection.
+ */
+const HOLDINGS_AS_ON_PATTERN = /\bHOLDINGS\s+AS\s+ON\s+(\d{4}-\d{2}-\d{2})\b/i;
+
+async function readGrid(filePath: string): Promise<string[][]> {
+  const extension = path.extname(filePath).toLowerCase();
+  return extension === ".csv" || extension === ".txt"
+    ? parseCsv((await readFile(filePath)).toString("utf-8"))
+    : readXlsxGrid(filePath);
+}
+
 /**
  * Reads a holdings export into raw rows.
  *
@@ -28,14 +45,35 @@ export async function parseSnapshotFile(filePath: string): Promise<RawSnapshotFi
   const buffer = await readFile(filePath);
   const fileHash = hashBuffer(buffer);
   const fileName = path.basename(filePath);
-  const extension = path.extname(filePath).toLowerCase();
 
-  const grid =
-    extension === ".csv" || extension === ".txt"
-      ? parseCsv(buffer.toString("utf-8"))
-      : await readXlsxGrid(filePath);
+  const grid = await readGrid(filePath);
 
   return { fileName, fileHash, ...toHeadersAndRows(grid) };
+}
+
+/**
+ * Scans a generic (non-Zerodha) export's leading rows for the explicit
+ * "HOLDINGS AS ON YYYY-MM-DD" metadata phrase real fund-house mutual-fund
+ * statements carry in their preamble, and returns the date it states.
+ *
+ * Bounded the same way `findHeaderRowIndex` is (a preamble title is a
+ * handful of rows, not the whole file) and matches only this one exact,
+ * explicit phrase — never a bare date-looking cell, and never the
+ * filename, per docs/09_INGESTION_ARCHITECTURE.md's "a snapshot's date is
+ * read, never guessed" rule (see also D-011). Returns `null` when the
+ * phrase is not present, so the caller falls back to requiring an
+ * explicit `asOf` — the pre-existing safe-failure behavior.
+ */
+export async function findGenericHoldingsAsOnDate(filePath: string): Promise<Date | null> {
+  const grid = await readGrid(filePath);
+  const limit = Math.min(grid.length, HEADER_SEARCH_LIMIT_ROWS);
+  for (let i = 0; i < limit; i += 1) {
+    for (const cell of grid[i] ?? []) {
+      const match = HOLDINGS_AS_ON_PATTERN.exec(cell);
+      if (match?.[1]) return new Date(`${match[1]}T00:00:00Z`);
+    }
+  }
+  return null;
 }
 
 async function readXlsxGrid(filePath: string): Promise<string[][]> {

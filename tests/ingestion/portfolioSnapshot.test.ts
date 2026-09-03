@@ -1,8 +1,14 @@
+import { copyFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { expectOk, valuePortfolio } from "../../src/domain";
 import { loadPositionsAsOf, loadValuations } from "../../src/data/loaders";
-import { findHeaderRowIndex, importPortfolioSnapshot, parseCsv } from "../../src/ingestion/portfolio";
+import {
+  findGenericHoldingsAsOnDate,
+  findHeaderRowIndex,
+  importPortfolioSnapshot,
+  parseCsv,
+} from "../../src/ingestion/portfolio";
 import { createTestDb } from "../setup/testDb";
 
 const FIXTURES = path.resolve(__dirname, "../fixtures/portfolio");
@@ -88,6 +94,59 @@ describe("header row detection", () => {
       ["Some Fund", "100"],
     ];
     expect(findHeaderRowIndex(grid)).toBeNull();
+  });
+});
+
+async function writeCsv(filePath: string, lines: readonly string[]): Promise<void> {
+  await writeFile(filePath, lines.join("\n") + "\n", "utf-8");
+}
+
+describe("generic 'HOLDINGS AS ON' date detection", () => {
+  const scratch = (name: string) => path.join(FIXTURES, name);
+
+  it("finds the date in the real mutual-fund fixture's preamble", async () => {
+    const found = await findGenericHoldingsAsOnDate(fixture("mutualfund-v2-real-layout.xlsx"));
+    expect(found?.toISOString().slice(0, 10)).toBe("2026-09-02");
+  });
+
+  it("returns null for a plain table with no such phrase", async () => {
+    const found = await findGenericHoldingsAsOnDate(fixture("equity-v1-base.csv"));
+    expect(found).toBeNull();
+  });
+
+  it("matches the exact phrase (case-insensitive) via a CSV cell, not a bare date or the Zerodha-style phrasing", async () => {
+    const bareDate = scratch("holdings-as-on-scratch-bare-date.csv");
+    const zerodhaStyle = scratch("holdings-as-on-scratch-zerodha-style.csv");
+    const exactPhrase = scratch("holdings-as-on-scratch-exact.csv");
+    try {
+      // A bare date-looking cell must never be accepted as the portfolio date.
+      await writeCsv(bareDate, ["2026-09-02", "Scheme Name,Units", "Some Fund,100"]);
+      expect(await findGenericHoldingsAsOnDate(bareDate)).toBeNull();
+
+      // Zerodha's own "...as on..." phrasing (no "HOLDINGS" prefix) must not
+      // satisfy this generic-path pattern — the two are deliberately distinct.
+      await writeCsv(zerodhaStyle, ["Equity Holdings Statement as on 2026-09-02"]);
+      expect(await findGenericHoldingsAsOnDate(zerodhaStyle)).toBeNull();
+
+      // Case-insensitive, and the exact phrase is sufficient on its own.
+      await writeCsv(exactPhrase, ["holdings as on 2026-09-02"]);
+      expect((await findGenericHoldingsAsOnDate(exactPhrase))?.toISOString().slice(0, 10)).toBe(
+        "2026-09-02",
+      );
+    } finally {
+      await Promise.all([bareDate, zerodhaStyle, exactPhrase].map((f) => rm(f, { force: true })));
+    }
+  });
+
+  it("gives up past the same bounded search window findHeaderRowIndex uses, rather than scanning an entire file", async () => {
+    const beyondBound = scratch("holdings-as-on-scratch-beyond-bound.csv");
+    try {
+      const junkRows = Array.from({ length: 55 }, (_, i) => `junk row ${i}`);
+      await writeCsv(beyondBound, [...junkRows, "HOLDINGS AS ON 2026-09-02"]);
+      expect(await findGenericHoldingsAsOnDate(beyondBound)).toBeNull();
+    } finally {
+      await rm(beyondBound, { force: true });
+    }
   });
 });
 
@@ -370,11 +429,11 @@ describe("portfolio snapshot ingestion", () => {
     expect(position.quantity).toBe(50);
   });
 
-  it("locates the real mutual-fund statement's holdings header past a personal-details and summary preamble", async () => {
+  it("locates the real mutual-fund statement's holdings header past a personal-details and summary preamble, and reads its own 'HOLDINGS AS ON' date without asOf being supplied", async () => {
     const audit = await importPortfolioSnapshot(
       db,
       fixture("mutualfund-v2-real-layout.xlsx"),
-      { asOf: SEP_30, assetClass: "mutual_fund" },
+      { assetClass: "mutual_fund" }, // no asOf supplied — must be read from "HOLDINGS AS ON 2026-09-02"
     );
 
     // Zero would mean the header-row bug reproduced; both real holdings must
@@ -382,6 +441,8 @@ describe("portfolio snapshot ingestion", () => {
     expect(audit.rowsScanned).toBe(2);
     expect(audit.positionsCreated).toBe(2);
     expect(audit.issues.some((issue) => issue.includes("no recognizable"))).toBe(false);
+    // The statement's own preamble date, never the filename, never guessed.
+    expect(audit.asOf.toISOString().slice(0, 10)).toBe("2026-09-02");
 
     const fund = await db.instrument.findFirstOrThrow({
       where: { identifier: "Parag Parikh Flexi Cap Fund" },
@@ -390,6 +451,7 @@ describe("portfolio snapshot ingestion", () => {
       where: { instrumentId: fund.id },
     });
 
+    expect(position.asOfDate.toISOString().slice(0, 10)).toBe("2026-09-02");
     // Fractional units survive, and the reported Invested Value is used
     // verbatim as the cost basis — never fabricated, never recomputed.
     expect(position.quantity).toBeCloseTo(1250.456, 6);
@@ -398,6 +460,34 @@ describe("portfolio snapshot ingestion", () => {
     // absent, never guessed at.
     expect(await db.valuation.count({ where: { instrumentId: fund.id } })).toBe(0);
     expect(position.trustState).toBe("validated");
+  });
+
+  it("refuses rather than silently trusting one date when the statement's own 'HOLDINGS AS ON' date disagrees with an explicitly supplied asOf", async () => {
+    await expect(
+      importPortfolioSnapshot(db, fixture("mutualfund-v2-real-layout.xlsx"), {
+        asOf: SEP_30, // the fixture itself states 2026-09-02, not 2026-09-30
+        assetClass: "mutual_fund",
+      }),
+    ).rejects.toThrow(/is dated 2026-09-02 but 2026-09-30 was supplied/);
+    expect(await db.positionSnapshot.count()).toBe(0);
+  });
+
+  it("does not derive the portfolio date from the filename — a date-shaped filename with no in-file date still requires an explicit asOf", async () => {
+    // equity-v1-base.csv's own filename carries no date, so this proves the
+    // general rule using a renamed copy whose *name* looks dated but whose
+    // *content* (no "HOLDINGS AS ON" phrase, a plain Symbol/Name/Quantity
+    // table) states none — exactly the case a filename-derived date would
+    // wrongly "fix".
+    const datedNameCopy = path.join(FIXTURES, "equity-v1-base-2026-01-01.csv");
+    await copyFile(fixture("equity-v1-base.csv"), datedNameCopy);
+    try {
+      await expect(
+        importPortfolioSnapshot(db, datedNameCopy, { assetClass: "equity" }),
+      ).rejects.toThrow(/states neither an as-of date nor an asset class/);
+      expect(await db.positionSnapshot.count()).toBe(0);
+    } finally {
+      await rm(datedNameCopy, { force: true });
+    }
   });
 
   it("feeds the valuation engine, which values the portfolio from imported data", async () => {
