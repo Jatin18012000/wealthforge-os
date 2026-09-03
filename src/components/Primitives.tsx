@@ -63,8 +63,14 @@ export function InsufficientData({ reasons }: { reasons: readonly string[] }) {
       <span className="insufficient">Insufficient data</span>
       {reasons.length > 0 && (
         <ul className="insufficient__reasons">
-          {reasons.map((reason) => (
-            <li key={reason}>{reason}</li>
+          {reasons.map((reason, index) => (
+            // Index-qualified: two different underlying insufficiencies can
+            // produce the identical reason string (e.g. both the opening and
+            // closing side of a range failing with "no position could be
+            // valued at the requested date") — a plain `reason` key then
+            // collides even though both lines are real, distinct facts that
+            // must both render.
+            <li key={`${index}-${reason}`}>{reason}</li>
           ))}
         </ul>
       )}
