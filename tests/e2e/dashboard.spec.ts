@@ -213,6 +213,29 @@ test.describe("Command Center", () => {
     await howCalculated.click();
     await expect(xrayCard.getByText(/getPortfolioView/)).toBeVisible();
   });
+
+  test("drills down from the headline summary tiles to their supporting detail (v1.1.1, F2)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    // Every drill-down link is an in-page anchor to a widget that already
+    // exists further down the same Command Center — F2 links to it rather
+    // than computing a second view of the same figure.
+    await page.getByRole("link", { name: "See decomposition →" }).click();
+    await expect(page).toHaveURL(/#net-worth-waterfall$/);
+    await expect(page.getByRole("heading", { name: "Net worth waterfall" })).toBeVisible();
+
+    await page.goto("/");
+    await page.getByRole("link", { name: "See holdings →" }).click();
+    await expect(page).toHaveURL(/#portfolio-xray$/);
+    await expect(page.getByRole("heading", { name: "Portfolio X-Ray", exact: true })).toBeVisible();
+
+    await page.goto("/");
+    await page.getByRole("link", { name: "Funding detail →" }).click();
+    await expect(page).toHaveURL(/#goal-funding-radar$/);
+    await expect(page.getByRole("heading", { name: "Goal funding radar" })).toBeVisible();
+  });
 });
 
 test.describe("Budget", () => {

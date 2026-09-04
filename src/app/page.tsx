@@ -201,9 +201,18 @@ export default async function CommandCenterPage({
             </Computed$>
           }
           note={
-            view.netWorth.kind === "ok"
-              ? `${formatMoney(view.netWorth.value.totalAssetsMinorUnits)} assets − ${formatMoney(view.netWorth.value.totalLiabilitiesMinorUnits)} liabilities`
-              : "No trusted asset or liability records yet"
+            <>
+              {view.netWorth.kind === "ok"
+                ? `${formatMoney(view.netWorth.value.totalAssetsMinorUnits)} assets − ${formatMoney(view.netWorth.value.totalLiabilitiesMinorUnits)} liabilities`
+                : "No trusted asset or liability records yet"}
+              <br />
+              {/* v1.1.1 F2 — jumps to the widget that already holds this
+                  figure's decomposition/history further down the same
+                  page, rather than computing a second view of it. */}
+              <a href="#net-worth-waterfall">See decomposition →</a>
+              {" · "}
+              <a href="#net-worth-trajectory">See history →</a>
+            </>
           }
           tone={
             view.netWorth.kind === "ok" && view.netWorth.value.netWorthMinorUnits < 0
@@ -226,9 +235,15 @@ export default async function CommandCenterPage({
             </Computed$>
           }
           note={
-            view.portfolio.valuation.kind === "ok"
-              ? `${view.portfolio.holdings.length} holdings`
-              : "No holdings could be valued"
+            <>
+              {view.portfolio.valuation.kind === "ok"
+                ? `${view.portfolio.holdings.length} holdings`
+                : "No holdings could be valued"}
+              <br />
+              <a href="#portfolio-xray">See holdings →</a>
+              {" · "}
+              <a href="#contribution-vs-return">See contribution vs return →</a>
+            </>
           }
         />
 
@@ -657,7 +672,12 @@ export default async function CommandCenterPage({
     "goals-priority": (
       <Card
         title="Goals in priority order"
-        action={<Link href="/goals">Open goals →</Link>}
+        action={
+          <>
+            <Link href="/goals">Open goals →</Link>{" "}
+            <a href="#goal-funding-radar">Funding detail →</a>
+          </>
+        }
         key="goals-priority"
       >
         {view.goals.active.length === 0 ? (
@@ -1520,7 +1540,7 @@ export default async function CommandCenterPage({
           const showHeader = widget.section !== lastSection;
           lastSection = widget.section;
           return (
-            <div key={widget.id} style={cardStyle}>
+            <div key={widget.id} id={widget.id} style={cardStyle}>
               {showHeader &&
                 widget.section !== "Headline" &&
                 widget.section !== "Daily Brief" && <h2>{widget.section}</h2>}
