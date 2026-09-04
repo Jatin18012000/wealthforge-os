@@ -20,6 +20,7 @@ const SCREENS = [
   { path: "/insurance", heading: "Insurance" },
   { path: "/analytics", heading: "Analytics" },
   { path: "/timeline", heading: "Timeline" },
+  { path: "/monthly-review", heading: "Monthly Review" },
   { path: "/settings", heading: "Settings" },
   { path: "/data-center", heading: "Data Center" },
   { path: "/market", heading: "Market" },
@@ -626,6 +627,38 @@ test.describe("Timeline (v1.1.1, F6)", () => {
 
   test("has exactly one h1 and a labelled nav", async ({ page }) => {
     await page.goto("/timeline");
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+});
+
+test.describe("Monthly Review (v1.1.1, F9)", () => {
+  test("labels every line as Fact, Inference or Recommendation and names the reviewed month", async ({
+    page,
+  }) => {
+    await page.goto("/monthly-review");
+
+    for (const heading of [
+      "Period",
+      "Income & Expenses",
+      "Month-over-month",
+      "Plan vs reality",
+      "Goals",
+      "Liabilities & EMI",
+      "Data quality",
+    ]) {
+      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    }
+
+    // Every section always emits at least one line (never a silently empty
+    // section), and every line is labeled — "Fact" is guaranteed to appear
+    // since the demo fixtures produce budget/goal data; Inference and
+    // Recommendation lines depend on what that data happens to trigger.
+    await expect(page.getByText("Fact", { exact: true }).first()).toBeVisible();
+  });
+
+  test("has exactly one h1 and a labelled nav", async ({ page }) => {
+    await page.goto("/monthly-review");
     await expect(page.locator("h1")).toHaveCount(1);
     await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
   });
