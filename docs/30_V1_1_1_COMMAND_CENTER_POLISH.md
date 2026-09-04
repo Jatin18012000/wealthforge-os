@@ -223,10 +223,54 @@ over data the schema already stores.
   `Insight`/`ScenarioResult` (the ones anchoring the Command Center's
   primary sections); the rest do not yet show freshness/calculation-basis
   inline, though nothing prevents adding it — see "What was not built."
-- F2, F4, F5, F6, F8, F9 remain unimplemented, each named above with a
-  specific reason (scope, or a genuine open decision blocking a subset of
-  its sub-items, per D-017's own precedent).
 - The attention panel's Critical/Important/Watch classification is a
   fixed, documented mapping (see F1 above) — it does not learn or adapt,
   by design, since anything more would risk inventing a scoring system
   this project's rules do not sanction.
+
+## Addendum — follow-up pass: F2, F4, F6, F8 (partial), F9
+
+Everything above this line is the original bounded pass. In a follow-up
+pass, F2, F4, F6, F9, and the two safe sub-items of F8 were implemented,
+in that order (F4 first since F2/F5 build on its widget-id scheme).
+F5 (Financial Focus Mode) was intentionally left out of this batch — see
+below.
+
+- **F4 — Dashboard personalization**: `src/domain/dashboardLayout.ts`
+  (pure widget catalog + validation/resolution), persisted on `AppSetting`
+  (`src/views/dashboardLayoutStore.ts`, no schema change), edited from a
+  new "Dashboard layout" card on Settings, applied to Command Center
+  rendering (`src/app/page.tsx` restructured into a widget-id → node map,
+  ordered/filtered by `resolveVisibleDashboardWidgets`).
+- **F2 — Widget drill-down**: the Net Worth, Portfolio, and Goals summary
+  widgets link (in-page anchors, using the stable widget ids F4
+  introduced) to the Command Center widget that already holds their
+  decomposition/holdings/funding detail — no second calculation.
+- **F6 — Unified Wealth Timeline**: new `/timeline` screen
+  (`src/domain/timeline.ts` pure composition + `src/views/timelineView.ts`
+  DB loader) merging plan records, activities, and position snapshots into
+  one chronological, filterable feed. Plan entries keep month-level
+  precision rather than fabricating a day.
+- **F9 — Monthly Financial Review**: new `/monthly-review` screen
+  (`src/views/monthlyReviewView.ts`), a second `Report`
+  (`src/views/reportView.ts`'s Fact/Inference/Recommendation structure,
+  already reused once for the Daily Brief) scoped to the most recently
+  completed month, reusing Analytics' own month-over-month comparison and
+  the Budget screen's own monthly summary/plan-vs-reality.
+- **F8 (partial) — Financial Milestones**: `src/domain/milestones.ts`
+  implements only the two sub-items with zero invented threshold — a goal
+  reaching 100% funded, and a liability's EMI schedule reaching zero
+  payments remaining — surfaced in a new "Milestones" Command Center
+  widget. The emergency-fund, portfolio-value, and savings-rate
+  milestones **remain unimplemented**: each still requires a threshold
+  this repository does not define, and the widget's own copy says so
+  rather than leaving it silent.
+- **F5 (Financial Focus Mode) was not built** in this batch. It depends
+  on F4, which now exists, so it is unblocked — but it was not part of
+  what was asked for and is left for a future pass rather than assumed.
+
+Every item above was implemented with its own unit tests (domain-level,
+pure-function tests plus DB-backed view tests) and Playwright E2E
+coverage, with the full existing regression suite re-run clean after
+each one (tsc, eslint, vitest, next build, Playwright) before moving to
+the next.
