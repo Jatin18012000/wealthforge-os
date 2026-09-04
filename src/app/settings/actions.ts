@@ -2,9 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { DASHBOARD_WIDGET_CATALOG } from "../../domain";
 import { db } from "../../lib/db";
 import { applyOverride, revokeOverride } from "../../manual/overrides";
 import { findOverridableField } from "../../manual/registry";
+import {
+  resetDashboardLayoutPreferences,
+  saveDashboardLayoutPreferences,
+} from "../../views/dashboardLayoutStore";
 import { parseEntryValue } from "../../presentation/parse";
 import { toMode } from "../../views/settingsView";
 
@@ -80,4 +85,35 @@ export async function revokeOverrideAction(form: FormData): Promise<void> {
 
   revalidatePath("/", "layout");
   redirect(settingsUrl({ period, withdrawn: "1" }));
+}
+
+/**
+ * v1.1.1 F4 — dashboard personalization.
+ *
+ * Reads the submitted form purely by widget id against the fixed catalog
+ * (never by iterating arbitrary form keys), so a tampered or extra field
+ * cannot introduce an unknown widget. `saveDashboardLayoutPreferences`
+ * re-validates everything again before writing, so this parsing step is a
+ * convenience, not the security boundary.
+ */
+export async function saveDashboardLayoutAction(form: FormData): Promise<void> {
+  const density = text(form, "density") === "compact" ? "compact" : "expanded";
+
+  const widgets = DASHBOARD_WIDGET_CATALOG.map((widget) => ({
+    id: widget.id,
+    visible: form.get(`visible_${widget.id}`) !== null,
+    order: Number(text(form, `order_${widget.id}`)),
+    favorite: form.get(`favorite_${widget.id}`) !== null,
+  }));
+
+  await saveDashboardLayoutPreferences(db, { density, widgets });
+
+  revalidatePath("/", "layout");
+  redirect(settingsUrl({ layoutSaved: "1" }));
+}
+
+export async function resetDashboardLayoutAction(): Promise<void> {
+  await resetDashboardLayoutPreferences(db);
+  revalidatePath("/", "layout");
+  redirect(settingsUrl({ layoutReset: "1" }));
 }

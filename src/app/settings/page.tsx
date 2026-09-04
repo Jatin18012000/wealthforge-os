@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { Card, EmptyState, InsufficientData } from "../../components/Primitives";
-import type { AdjustmentUnit } from "../../domain";
+import {
+  DASHBOARD_WIDGET_CATALOG,
+  type AdjustmentUnit,
+  type DashboardLayoutPreferences,
+} from "../../domain";
 import { db } from "../../lib/db";
 import type { OverrideTarget } from "../../manual/overrides";
 import { formatDate, formatPeriodMonth } from "../../presentation/format";
@@ -10,13 +14,19 @@ import {
   formatUnitValue,
   formatUnitValueSigned,
 } from "../../presentation/units";
+import { getDashboardLayoutPreferences } from "../../views/dashboardLayoutStore";
 import {
   getSettingsView,
   toMode,
   type OverrideEntry,
   type PreviewPanel,
 } from "../../views/settingsView";
-import { applyOverrideAction, revokeOverrideAction } from "./actions";
+import {
+  applyOverrideAction,
+  resetDashboardLayoutAction,
+  revokeOverrideAction,
+  saveDashboardLayoutAction,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -198,6 +208,120 @@ function PreviewCard({ preview, period }: { preview: PreviewPanel; period: strin
   );
 }
 
+/**
+ * v1.1.1 F4 — dashboard personalization.
+ *
+ * Renders one row per catalog widget grouped by section. A required
+ * (non-hideable) widget's checkbox is disabled and forced checked rather
+ * than omitted, so the user can see it exists and why it can't be turned
+ * off, instead of it silently not appearing in the list.
+ */
+function DashboardLayoutCard({
+  preferences,
+}: {
+  preferences: DashboardLayoutPreferences;
+}) {
+  const prefById = new Map(preferences.widgets.map((w) => [w.id, w]));
+  const sections = [...new Set(DASHBOARD_WIDGET_CATALOG.map((w) => w.section))];
+
+  return (
+    <Card title="Dashboard layout">
+      <p className="note" style={{ marginBottom: "0.6rem" }}>
+        Choose which Command Center widgets appear, their order, and which are favorited
+        (favorites always render first among the widgets you keep visible).
+      </p>
+      <form action={saveDashboardLayoutAction} className="stack" style={{ gap: "1rem" }}>
+        <label className="field">
+          <span className="field__label">Density</span>
+          <select
+            className="field__select"
+            name="density"
+            defaultValue={preferences.density}
+            aria-label="Dashboard density"
+          >
+            <option value="expanded">Expanded</option>
+            <option value="compact">Compact</option>
+          </select>
+        </label>
+
+        {sections.map((section) => (
+          <div key={section}>
+            <p className="note" style={{ marginBottom: "0.3rem" }}>
+              <strong>{section}</strong>
+            </p>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Widget</th>
+                    <th scope="col">Visible</th>
+                    <th scope="col">Order</th>
+                    <th scope="col">Favorite</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DASHBOARD_WIDGET_CATALOG.filter((w) => w.section === section).map(
+                    (widget) => {
+                      const pref = prefById.get(widget.id);
+                      const visible = pref?.visible ?? true;
+                      const order = pref?.order ?? widget.defaultOrder;
+                      const favorite = pref?.favorite ?? false;
+                      return (
+                        <tr key={widget.id}>
+                          <td>{widget.label}</td>
+                          <td>
+                            <input
+                              type="checkbox"
+                              name={`visible_${widget.id}`}
+                              defaultChecked={visible}
+                              disabled={!widget.hideable}
+                              aria-label={`Show ${widget.label}`}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="field__input"
+                              type="number"
+                              name={`order_${widget.id}`}
+                              defaultValue={order}
+                              style={{ width: "5rem" }}
+                              aria-label={`Order for ${widget.label}`}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="checkbox"
+                              name={`favorite_${widget.id}`}
+                              defaultChecked={favorite}
+                              aria-label={`Favorite ${widget.label}`}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    },
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+
+        <div>
+          <button type="submit" className="button button--primary">
+            Save layout
+          </button>
+        </div>
+      </form>
+
+      <form action={resetDashboardLayoutAction} style={{ marginTop: "0.6rem" }}>
+        <button type="submit" className="button button--quiet">
+          Reset to default layout
+        </button>
+      </form>
+    </Card>
+  );
+}
+
 export default async function SettingsPage({
   searchParams,
 }: {
@@ -230,10 +354,13 @@ export default async function SettingsPage({
     ...(requestedPeriod === "" ? {} : { periodMonth: requestedPeriod }),
     ...(entry === undefined ? {} : { entry }),
   });
+  const dashboardLayout = await getDashboardLayoutPreferences(db);
 
   const period = view.periodMonth ?? "";
   const applied = one("applied");
   const error = one("error");
+  const layoutSaved = one("layoutSaved");
+  const layoutReset = one("layoutReset");
 
   return (
     <>
@@ -263,6 +390,18 @@ export default async function SettingsPage({
           <p className="alert">
             <span className="alert__title">Override withdrawn.</span> The source value
             applies again.
+          </p>
+        )}
+        {layoutSaved !== "" && (
+          <p className="alert">
+            <span className="alert__title">Dashboard layout saved.</span> The Command
+            Center now reflects it.
+          </p>
+        )}
+        {layoutReset !== "" && (
+          <p className="alert">
+            <span className="alert__title">Dashboard layout reset.</span> Every widget is
+            visible again in its default order.
           </p>
         )}
 
@@ -467,6 +606,8 @@ export default async function SettingsPage({
             </>
           )}
         </Card>
+
+        <DashboardLayoutCard preferences={dashboardLayout} />
       </div>
     </>
   );

@@ -159,3 +159,14 @@ export {
   type FutureValueInput,
   type DebtAmortizationResult,
 } from "./scenarios";
+export {
+  DASHBOARD_WIDGET_CATALOG,
+  defaultDashboardLayoutPreferences,
+  normalizeDashboardLayoutPreferences,
+  resolveVisibleDashboardWidgets,
+  type DashboardWidgetDefinition,
+  type DashboardDensity,
+  type DashboardWidgetPreference,
+  type DashboardLayoutPreferences,
+  type ResolvedDashboardWidget,
+} from "./dashboardLayout";
