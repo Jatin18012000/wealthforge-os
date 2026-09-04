@@ -52,6 +52,7 @@ const emptyGoalLiability: GoalLiabilityIntelligenceView = {
   debtFreedomMeter: insight<DebtFreedomSummary>(insufficient("no data")),
   emiReleaseTimeline: insight<readonly never[]>(insufficient("no data")) as GoalLiabilityIntelligenceView["emiReleaseTimeline"],
   goalTradeOffSimulator: insight<ScenarioResult<readonly GoalTradeOffRow[]>>(insufficient("no data")),
+  milestones: [],
 };
 
 const emptyInvestment: InvestmentIntelligenceView = {

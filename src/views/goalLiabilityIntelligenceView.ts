@@ -7,6 +7,8 @@ import {
   buildScenarioResult,
   computeGoalProgress,
   daysBetween,
+  detectGoalMilestones,
+  detectLiabilityMilestones,
   insufficient,
   ok,
   projectEmiRelease,
@@ -22,6 +24,7 @@ import {
   type Insight,
   type LiabilityDetail,
   type MetricDefinition,
+  type Milestone,
   type PayerShare,
   type ReleaseSchedule,
   type ScenarioResult,
@@ -135,6 +138,13 @@ export interface GoalLiabilityIntelligenceView {
   readonly debtFreedomMeter: Insight<DebtFreedomSummary>;
   readonly emiReleaseTimeline: Insight<readonly EmiReleaseRow[]>;
   readonly goalTradeOffSimulator: Insight<ScenarioResult<readonly GoalTradeOffRow[]>>;
+  /**
+   * v1.1.1 F8 (goal-achieved / liability-paid-off sub-items only — see
+   * `src/domain/milestones.ts` for why the other three named sub-items are
+   * not implemented). Never `Computed` — an empty list is a complete,
+   * correct answer ("no milestone reached yet"), not insufficient data.
+   */
+  readonly milestones: readonly Milestone[];
 }
 
 const APPROX_DAYS_PER_MONTH = 30;
@@ -174,13 +184,30 @@ export async function getGoalLiabilityIntelligenceView(
     trustState: row.trustState,
   }));
 
+  const goalFundingRadar = buildGoalFundingRadar(radarRows, asOf);
+  const emiReleaseTimeline = buildEmiReleaseTimeline(liabilities, payments, asOf);
+
+  const goalMilestones = detectGoalMilestones(
+    radarRows.map((row) => ({ name: row.goal.name, progressRatio: row.progress.progressRatio })),
+  );
+  const liabilityMilestones = detectLiabilityMilestones(
+    emiReleaseTimeline.result.kind === "ok"
+      ? emiReleaseTimeline.result.value.flatMap((row) =>
+          row.release.kind === "ok"
+            ? [{ name: row.liability.name, paymentsRemaining: row.release.value.paymentsRemaining }]
+            : [],
+        )
+      : [],
+  );
+
   return {
-    goalFundingRadar: buildGoalFundingRadar(radarRows, asOf),
+    goalFundingRadar,
     goalCollisionDetector: buildGoalCollisionDetector(active, radarRows, capacityMinorUnits, asOf),
     emergencyFundRunway: buildEmergencyFundRunway(asOf),
     debtFreedomMeter: buildDebtFreedomMeter(liabilities, payments, asOf),
-    emiReleaseTimeline: buildEmiReleaseTimeline(liabilities, payments, asOf),
+    emiReleaseTimeline,
     goalTradeOffSimulator: buildGoalTradeOffSimulator(active, radarRows, capacityMinorUnits, asOf),
+    milestones: [...goalMilestones, ...liabilityMilestones],
   };
 }
 

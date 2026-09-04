@@ -139,6 +139,7 @@ test.describe("Command Center", () => {
       "Financial health score",
       "Needs attention",
       "Data health",
+      "Milestones",
       "Savings & investment rate trend",
       "Portfolio growth decomposition",
       "Contribution vs return",

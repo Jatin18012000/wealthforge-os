@@ -160,6 +160,14 @@ export {
   type DebtAmortizationResult,
 } from "./scenarios";
 export {
+  detectGoalMilestones,
+  detectLiabilityMilestones,
+  type Milestone,
+  type MilestoneKind,
+  type GoalMilestoneCandidate,
+  type LiabilityMilestoneCandidate,
+} from "./milestones";
+export {
   planRecordToTimelineEntry,
   activityToTimelineEntry,
   positionSnapshotToTimelineEntry,

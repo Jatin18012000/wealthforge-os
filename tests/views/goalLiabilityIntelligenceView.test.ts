@@ -24,6 +24,74 @@ describe("goal & liability intelligence view — empty database", () => {
     // Emergency Fund Runway always reports insufficient — D-017 — with or
     // without any data, since no essential-expense split exists at all.
     expect(view.emergencyFundRunway.result.kind).toBe("insufficient-data");
+
+    // No milestone is a complete, correct answer with no data — never
+    // insufficient-data (there's nothing here that could be "insufficient").
+    expect(view.milestones).toEqual([]);
+  });
+});
+
+describe("goal & liability intelligence view — Milestones (v1.1.1 F8)", () => {
+  const testDb = createTestDb();
+  const db = testDb.db;
+
+  beforeAll(async () => {
+    const goal = await db.goal.create({
+      data: {
+        name: "Emergency Fund",
+        kind: "emergency_fund",
+        targetAmountMinorUnits: 100_000,
+        priorityRank: 1,
+        lifecycleState: "in_progress",
+      },
+    });
+    await db.activity.create({
+      data: {
+        kind: "goal_contribution",
+        goalId: goal.id,
+        amountMinorUnits: 100_000,
+        occurredOn: new Date("2026-08-01T00:00:00Z"),
+        trustState: "validated",
+      },
+    });
+
+    const liability = await db.liability.create({
+      data: {
+        name: "Short Personal Loan",
+        kind: "other",
+        principalMinorUnits: 10_000,
+        outstandingMinorUnits: 0,
+        outstandingAsOf: new Date("2026-08-01T00:00:00Z"),
+        interestRateBps: 1_200,
+        tenureMonths: 1,
+        emiAmountMinorUnits: 10_000,
+      },
+    });
+    await db.activity.create({
+      data: {
+        kind: "emi_payment",
+        liabilityId: liability.id,
+        amountMinorUnits: 10_000,
+        occurredOn: new Date("2026-08-01T00:00:00Z"),
+        trustState: "validated",
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await testDb.cleanup();
+  });
+
+  it("flags a goal at 100% funded and a liability with zero payments remaining", async () => {
+    const view = await getGoalLiabilityIntelligenceView(db, ASOF, null);
+    expect(view.milestones).toContainEqual({
+      kind: "goal_achieved",
+      label: "Emergency Fund — goal achieved (100% funded)",
+    });
+    expect(view.milestones).toContainEqual({
+      kind: "liability_paid_off",
+      label: "Short Personal Loan — fully paid off",
+    });
   });
 });
 

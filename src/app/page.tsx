@@ -998,6 +998,29 @@ export default async function CommandCenterPage({
       </Card>
     ),
 
+    milestones: (
+      <Card title="Milestones" key="milestones">
+        <p className="note" style={{ marginBottom: "0.6rem" }}>
+          A goal reaching 100% funded, or a liability&apos;s EMI schedule reaching zero
+          payments remaining — both already-computed facts, restated here (v1.1.1 F8).
+          Emergency-fund, portfolio-value, and savings-rate milestones are not shown: each
+          would require a threshold no document in this app defines, and inventing one would
+          misrepresent a fact rather than restate one.
+        </p>
+        {goalLiability.milestones.length === 0 ? (
+          <EmptyState>No milestone reached yet.</EmptyState>
+        ) : (
+          <ul className="alert-list">
+            {goalLiability.milestones.map((milestone, index) => (
+              <li key={`${milestone.kind}-${index}`} className="alert">
+                <span className="alert__title">{milestone.label}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    ),
+
     "savings-investment-trend":
       wealth === null ? null : (
         <Card title="Savings & investment rate trend" key="savings-investment-trend">
