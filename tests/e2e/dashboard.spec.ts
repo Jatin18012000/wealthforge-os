@@ -19,6 +19,7 @@ const SCREENS = [
   { path: "/liabilities", heading: "Liabilities" },
   { path: "/insurance", heading: "Insurance" },
   { path: "/analytics", heading: "Analytics" },
+  { path: "/timeline", heading: "Timeline" },
   { path: "/settings", heading: "Settings" },
   { path: "/data-center", heading: "Data Center" },
   { path: "/market", heading: "Market" },
@@ -596,6 +597,35 @@ test.describe("Settings — manual controls", () => {
 
   test("has exactly one h1 and a labelled nav", async ({ page }) => {
     await page.goto("/settings");
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+});
+
+test.describe("Timeline (v1.1.1, F6)", () => {
+  test("shows plan, confirmed activity, and observed entries in one feed", async ({ page }) => {
+    await page.goto("/timeline");
+
+    await expect(page.getByRole("columnheader", { name: "When" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Type" })).toBeVisible();
+    // The demo fixtures cover all three buckets, so every label appears
+    // somewhere in the Type column rather than the feed collapsing to one.
+    for (const label of ["Confirmed activity", "Observed", "Plan"]) {
+      await expect(page.getByRole("cell", { name: label, exact: true }).first()).toBeVisible();
+    }
+  });
+
+  test("filters to a single bucket via the filter links", async ({ page }) => {
+    await page.goto("/timeline");
+    await page.getByRole("link", { name: "Plan", exact: true }).click();
+    await expect(page).toHaveURL(/bucket=plan/);
+    await expect(page.getByRole("cell", { name: "Confirmed activity", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("cell", { name: "Observed", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("cell", { name: "Plan", exact: true }).first()).toBeVisible();
+  });
+
+  test("has exactly one h1 and a labelled nav", async ({ page }) => {
+    await page.goto("/timeline");
     await expect(page.locator("h1")).toHaveCount(1);
     await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
   });

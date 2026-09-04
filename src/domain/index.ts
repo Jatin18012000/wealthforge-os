@@ -160,6 +160,17 @@ export {
   type DebtAmortizationResult,
 } from "./scenarios";
 export {
+  planRecordToTimelineEntry,
+  activityToTimelineEntry,
+  positionSnapshotToTimelineEntry,
+  buildWealthTimeline,
+  type TimelineBucket,
+  type TimelineEntry,
+  type PlanRecordTimelineInput,
+  type ActivityTimelineInput,
+  type PositionSnapshotTimelineInput,
+} from "./timeline";
+export {
   DASHBOARD_WIDGET_CATALOG,
   defaultDashboardLayoutPreferences,
   normalizeDashboardLayoutPreferences,

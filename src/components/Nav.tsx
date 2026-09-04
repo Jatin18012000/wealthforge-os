@@ -16,6 +16,7 @@ const LINKS = [
   { href: "/liabilities", label: "Liabilities" },
   { href: "/insurance", label: "Insurance" },
   { href: "/analytics", label: "Analytics" },
+  { href: "/timeline", label: "Timeline" },
   { href: "/settings", label: "Settings" },
   { href: "/market", label: "Market" },
   { href: "/data-center", label: "Data Center" },
