@@ -140,6 +140,7 @@ test.describe("Command Center", () => {
       "Needs attention",
       "Data health",
       "Milestones",
+      "Overall savings rate",
       "Savings & investment rate trend",
       "Portfolio growth decomposition",
       "Contribution vs return",
@@ -360,6 +361,33 @@ test.describe("Goals", () => {
     await expect(
       page.getByText(/derived from its contribution and withdrawal history/),
     ).toBeVisible();
+  });
+
+  test("tops up the Emergency Fund and reflects it immediately (D-017 resolved)", async ({
+    page,
+  }) => {
+    await page.goto("/goals");
+
+    const efCard = page.locator(".card", { hasText: "Emergency Fund" }).first();
+    await expect(efCard).toBeVisible();
+
+    const balanceBefore = await efCard
+      .locator("tr", { hasText: "Current balance" })
+      .locator("td.num")
+      .innerText();
+
+    await efCard.locator('input[name="amount"]').fill("1");
+    await efCard.getByRole("button", { name: "Add to Emergency Fund" }).click();
+
+    await page.waitForURL(/goals\?toppedUp=1/);
+    await expect(page.getByText("Emergency Fund topped up.")).toBeVisible();
+
+    const updatedCard = page.locator(".card", { hasText: "Emergency Fund" }).first();
+    const balanceAfter = await updatedCard
+      .locator("tr", { hasText: "Current balance" })
+      .locator("td.num")
+      .innerText();
+    expect(balanceAfter).not.toBe(balanceBefore);
   });
 });
 

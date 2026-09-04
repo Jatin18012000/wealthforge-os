@@ -162,11 +162,25 @@ export {
 export {
   detectGoalMilestones,
   detectLiabilityMilestones,
+  detectEmergencyFundMilestone,
+  detectSavingsRateMilestone,
   type Milestone,
   type MilestoneKind,
   type GoalMilestoneCandidate,
   type LiabilityMilestoneCandidate,
 } from "./milestones";
+export {
+  EMERGENCY_FUND_TARGET_MONTHS,
+  computeEmergencyFundTargetMinorUnits,
+  computeEmergencyFundRunwayMonths,
+  validateEmergencyFundTopUp,
+  type EmergencyFundTopUpValidation,
+} from "./emergencyFund";
+export {
+  OVERALL_SAVINGS_RATE_MILESTONE_RATIO,
+  computeOverallSavingsRate,
+  type OverallSavingsRateInput,
+} from "./savingsRate";
 export {
   planRecordToTimelineEntry,
   activityToTimelineEntry,

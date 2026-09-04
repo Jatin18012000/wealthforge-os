@@ -1,23 +1,30 @@
 import type { Computed } from "./result";
 
 /**
- * Financial Milestones (v1.1.1 F8) — the two sub-items judged safe to build
- * without inventing a threshold (`docs/30_V1_1_1_COMMAND_CENTER_POLISH.md`,
- * F8): a goal reaching 100% funded, and a liability's EMI obligation
- * reaching zero payments remaining. Both booleans already exist as
- * already-computed fields elsewhere (`GoalProgress.progressRatio`,
- * `ReleaseSchedule.paymentsRemaining`) — this module only names the
- * boundary condition and the label, it introduces no new figure.
+ * Financial Milestones (v1.1.1 F8).
  *
- * The other three named sub-items — an emergency-fund threshold, a
- * portfolio-value threshold, and a savings-rate milestone — are
- * deliberately NOT implemented here: each requires picking a round number
- * or percentage that no document in this repository defines, which would
- * violate "never invent a new financial fact." They stay unbuilt until a
- * real threshold is supplied, per the same reasoning as D-017.
+ * Started with the two sub-items safe to build without inventing a
+ * threshold (`docs/30_V1_1_1_COMMAND_CENTER_POLISH.md`, F8): a goal
+ * reaching 100% funded, and a liability's EMI obligation reaching zero
+ * payments remaining — both derived from already-computed fields
+ * (`GoalProgress.progressRatio`, `ReleaseSchedule.paymentsRemaining`).
+ *
+ * The Emergency Fund and Overall Savings Rate milestones were added once
+ * the account owner supplied the two thresholds that were missing (6
+ * months of essential spending; 25% of income) — see
+ * `src/domain/emergencyFund.ts` and `src/domain/savingsRate.ts`. Those
+ * numbers are the owner's own stated targets, not invented here.
+ *
+ * The portfolio-value milestone remains deliberately NOT implemented:
+ * no threshold for it has been supplied, and guessing one would violate
+ * "never invent a new financial fact," the same reasoning as D-017.
  */
 
-export type MilestoneKind = "goal_achieved" | "liability_paid_off";
+export type MilestoneKind =
+  | "goal_achieved"
+  | "liability_paid_off"
+  | "emergency_fund_target_reached"
+  | "savings_rate_target_reached";
 
 export interface Milestone {
   readonly kind: MilestoneKind;
@@ -50,4 +57,41 @@ export function detectLiabilityMilestones(
   return candidates
     .filter((c) => c.paymentsRemaining <= 0)
     .map((c) => ({ kind: "liability_paid_off" as const, label: `${c.name} — fully paid off` }));
+}
+
+/**
+ * The Emergency Fund milestone: runway has reached (or exceeded) the
+ * owner's stated 6-month target. `runwayMonths` is `computeEmergencyFundRunwayMonths`'s
+ * own output — this function only names the boundary, it does not
+ * recompute the ratio.
+ */
+export function detectEmergencyFundMilestone(
+  runwayMonths: Computed<number>,
+  targetMonths: number,
+): readonly Milestone[] {
+  if (runwayMonths.kind !== "ok" || runwayMonths.value < targetMonths) return [];
+  return [
+    {
+      kind: "emergency_fund_target_reached",
+      label: `Emergency fund reached ${targetMonths} months of essential spending`,
+    },
+  ];
+}
+
+/**
+ * The Overall Savings Rate milestone: the rate has reached (or exceeded)
+ * the owner's stated 25% target. `rate` is `computeOverallSavingsRate`'s
+ * own output.
+ */
+export function detectSavingsRateMilestone(
+  rate: Computed<number>,
+  targetRatio: number,
+): readonly Milestone[] {
+  if (rate.kind !== "ok" || rate.value < targetRatio) return [];
+  return [
+    {
+      kind: "savings_rate_target_reached",
+      label: `Overall savings rate reached ${Math.round(targetRatio * 100)}% of income`,
+    },
+  ];
 }

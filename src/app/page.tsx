@@ -28,6 +28,7 @@ import { listPeriods, resolveAsOf, resolveLatestPeriod } from "../views/context"
 import { getDashboardLayoutPreferences } from "../views/dashboardLayoutStore";
 import { getGoalLiabilityIntelligenceView } from "../views/goalLiabilityIntelligenceView";
 import { getInvestmentIntelligenceView } from "../views/investmentIntelligenceView";
+import { getOverallSavingsRateView } from "../views/savingsRateView";
 import { getScenarioEngineView } from "../views/scenarioEngineView";
 import { getWealthIntelligenceView } from "../views/wealthIntelligenceView";
 
@@ -143,6 +144,8 @@ export default async function CommandCenterPage({
   const goalLiability = await getGoalLiabilityIntelligenceView(db, asOf, latestPeriod);
   const behavioral = await getBehavioralIntelligenceView(db, asOf);
   const scenarios = await getScenarioEngineView(db, asOf, latestPeriod);
+  const savingsRate = await getOverallSavingsRateView(db, asOf, latestPeriod);
+  const allMilestones = [...goalLiability.milestones, ...savingsRate.milestones];
 
   const attention = buildAttentionPanel({
     investment,
@@ -1001,23 +1004,75 @@ export default async function CommandCenterPage({
     milestones: (
       <Card title="Milestones" key="milestones">
         <p className="note" style={{ marginBottom: "0.6rem" }}>
-          A goal reaching 100% funded, or a liability&apos;s EMI schedule reaching zero
-          payments remaining — both already-computed facts, restated here (v1.1.1 F8).
-          Emergency-fund, portfolio-value, and savings-rate milestones are not shown: each
-          would require a threshold no document in this app defines, and inventing one would
-          misrepresent a fact rather than restate one.
+          A goal reaching 100% funded, a liability&apos;s EMI schedule reaching zero payments
+          remaining, an Emergency Fund reaching 6 months of essential spending, or an
+          Overall Savings Rate reaching 25% of income — all already-computed facts, restated
+          here (v1.1.1 F8). A portfolio-value milestone is not shown: it would require a
+          threshold no document in this app defines, and inventing one would misrepresent a
+          fact rather than restate one.
         </p>
-        {goalLiability.milestones.length === 0 ? (
+        {allMilestones.length === 0 ? (
           <EmptyState>No milestone reached yet.</EmptyState>
         ) : (
           <ul className="alert-list">
-            {goalLiability.milestones.map((milestone, index) => (
+            {allMilestones.map((milestone, index) => (
               <li key={`${milestone.kind}-${index}`} className="alert">
                 <span className="alert__title">{milestone.label}</span>
               </li>
             ))}
           </ul>
         )}
+      </Card>
+    ),
+
+    "overall-savings-rate": (
+      <Card title="Overall savings rate" key="overall-savings-rate">
+        <p className="note" style={{ marginBottom: "0.5rem" }}>
+          Net stock/mutual-fund/ETF/EPF contributions + net Emergency Fund contributions +
+          leftover unallocated cash, over income, for the latest complete month.
+        </p>
+        <Computed$ result={savingsRate.insight.result} showReasons={false}>
+          {(summary) => (
+            <div className="table-scroll">
+              <table>
+                <tbody>
+                  <tr>
+                    <td>Income</td>
+                    <td className="num">{formatMoney(summary.incomeMinorUnits)}</td>
+                  </tr>
+                  <tr>
+                    <td>Net stock/MF/ETF/EPF contributions</td>
+                    <td className="num">
+                      {formatMoneySigned(summary.netInvestmentContributionMinorUnits)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Net Emergency Fund contributions</td>
+                    <td className="num">
+                      {formatMoneySigned(summary.netEmergencyFundContributionMinorUnits)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Leftover unallocated cash</td>
+                    <td className="num">{formatMoneySigned(summary.leftoverCashMinorUnits)}</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>Overall savings rate</strong>
+                    </td>
+                    <td className="num">
+                      <strong>
+                        <Computed$ result={summary.ratio} showReasons={false}>
+                          {(ratio) => <>{formatRatio(ratio)}</>}
+                        </Computed$>
+                      </strong>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Computed$>
       </Card>
     ),
 
@@ -1258,7 +1313,35 @@ export default async function CommandCenterPage({
     "emergency-fund-runway": (
       <Card title="Emergency fund runway" key="emergency-fund-runway">
         <Computed$ result={goalLiability.emergencyFundRunway.result}>
-          {(runway) => <>{runway.monthsOfRunway} months</>}
+          {(summary) => (
+            <div className="table-scroll">
+              <table>
+                <tbody>
+                  <tr>
+                    <td>Current balance</td>
+                    <td className="num">{formatMoney(summary.currentBalanceMinorUnits)}</td>
+                  </tr>
+                  <tr>
+                    <td>Target (6 months of essential spending)</td>
+                    <td className="num">
+                      {summary.targetMinorUnits === null ? "—" : formatMoney(summary.targetMinorUnits)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Runway</td>
+                    <td className="num">
+                      <Computed$ result={summary.monthsOfRunway} showReasons={false}>
+                        {(months) => <>{months.toFixed(1)} months</>}
+                      </Computed$>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="note" style={{ marginTop: "0.5rem" }}>
+                <Link href="/goals">Update in Goals →</Link>
+              </p>
+            </div>
+          )}
         </Computed$>
       </Card>
     ),

@@ -281,13 +281,13 @@ anything. **Decision deferred** until a real liability needs it; if raised,
 the likely answer is a "record all shares at once" form rather than a
 single-field override for that case.
 
-### D-017: No essential-expense methodology defined (v1.1, IM-04)
+### D-017: No essential-expense methodology defined (v1.1, IM-04) — RESOLVED
 
 The Emergency Fund Runway widget (`docs/21_INTELLIGENCE_MASTER_PLAN.md`)
 is meant to answer "how many months of essential spending does the
 emergency fund cover" — but the budget's `PlanCategory` (`income |
 expense | investment | emi`, `src/domain/budget.ts`) has no
-essential/discretionary split, and no source document defines one. Using
+essential/discretionary split, and no source document defined one. Using
 the whole `expense` category (or `committedOutflowMinorUnits`, expense +
 EMI) as a stand-in for "essential spending" would silently substitute
 total spending for essential spending — a mislabeling the IM-04 directive
@@ -296,14 +296,23 @@ out, entertainment, etc.) is bundled into the same `expense` lines as
 genuinely essential ones (groceries, utilities, rent) with nothing in the
 data model to tell them apart.
 
-**Decision: Emergency Fund Runway reports `insufficient-data` in every
-case** until a real essential/discretionary split exists in the plan
-record model (e.g. a `subcategory` field, or a per-line "essential" flag
-set at import or via manual override) — never approximated from total
-expense. **Deferred**, not blocking IM-04 or v1.1: the widget still
-reports the emergency fund's current balance and target via the existing
-Goal Funding Radar; only the runway ("N months covered") figure is
-gated on this decision.
+**Resolution (v1.1.1 follow-up pass):** the account owner has explicitly
+defined essential spending, for this purpose, as a month's total expenses
+plus EMIs — i.e. `MonthlyBudget.committedOutflowMinorUnits`, already
+computed by `summarizeMonth`, taken from the latest complete month. This
+is the owner's own stated definition, not one invented by inspecting the
+data model; it deliberately does not attempt a finer essential/
+discretionary split within `expense` (no document defines one), so it
+remains a coarser proxy than the ideal, but it is a real decision rather
+than a silent approximation.
+
+The owner also set the Emergency Fund target at 6 months of that figure,
+and a 25% Overall Savings Rate milestone (a separate metric — see
+`src/domain/savingsRate.ts`). See `src/domain/emergencyFund.ts` for the
+implementation and `docs/30_V1_1_1_COMMAND_CENTER_POLISH.md`'s addendum
+for what shipped. Emergency Fund Runway now reports a real figure
+whenever an Emergency Fund goal and a complete month's budget data exist,
+rather than `insufficient-data` in every case.
 
 ## Non-decisions (explicitly out of scope, not "open")
 

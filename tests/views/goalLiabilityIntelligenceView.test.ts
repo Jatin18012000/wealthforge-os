@@ -296,3 +296,98 @@ describe("goal & liability intelligence view — Debt Freedom Meter & EMI Releas
     expect(row?.payerShares.kind).toBe("insufficient-data");
   });
 });
+
+describe("goal & liability intelligence view — Emergency Fund Runway (D-017 resolved)", () => {
+  const testDb = createTestDb();
+  const db = testDb.db;
+  const PERIOD_MONTH = "2026-08";
+
+  beforeAll(async () => {
+    await db.goal.create({
+      data: {
+        name: "Emergency Fund",
+        kind: "emergency_fund",
+        targetAmountMinorUnits: 1, // ignored by the runway calculation — target is derived
+        priorityRank: 1,
+        lifecycleState: "in_progress",
+      },
+    });
+    await db.planRecord.create({
+      data: {
+        periodMonth: PERIOD_MONTH,
+        category: "expense",
+        labelRaw: "Rent",
+        labelNormalized: "Rent",
+        amountMinorUnits: 40_000,
+        trustState: "validated",
+      },
+    });
+    await db.planRecord.create({
+      data: {
+        periodMonth: PERIOD_MONTH,
+        category: "emi",
+        labelRaw: "Home Loan EMI",
+        labelNormalized: "Home Loan EMI",
+        amountMinorUnits: 10_000,
+        trustState: "validated",
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await testDb.cleanup();
+  });
+
+  it("reports insufficient data when no Emergency Fund goal exists", async () => {
+    const emptyDb = createTestDb();
+    const view = await getGoalLiabilityIntelligenceView(emptyDb.db, ASOF, PERIOD_MONTH);
+    expect(view.emergencyFundRunway.result.kind).toBe("insufficient-data");
+    await emptyDb.cleanup();
+  });
+
+  it("computes balance, target (6x essential spend), and runway once a goal and essential spend exist", async () => {
+    const goal = await db.goal.findFirstOrThrow({ where: { kind: "emergency_fund" } });
+    await db.activity.create({
+      data: {
+        kind: "goal_contribution",
+        goalId: goal.id,
+        amountMinorUnits: 150_000,
+        occurredOn: new Date("2026-08-01T00:00:00Z"),
+        trustState: "validated",
+      },
+    });
+
+    const view = await getGoalLiabilityIntelligenceView(db, ASOF, PERIOD_MONTH);
+    expect(view.emergencyFundRunway.result.kind).toBe("ok");
+    if (view.emergencyFundRunway.result.kind !== "ok") return;
+    const summary = view.emergencyFundRunway.result.value;
+
+    expect(summary.currentBalanceMinorUnits).toBe(150_000);
+    expect(summary.essentialSpendMinorUnits).toBe(50_000); // 40,000 expense + 10,000 EMI
+    expect(summary.targetMinorUnits).toBe(300_000); // 6 x 50,000
+    expect(summary.monthsOfRunway).toEqual({ kind: "ok", value: 3 }); // 150,000 / 50,000
+  });
+
+  it("flags the Emergency Fund milestone once runway reaches 6 months, and includes it among milestones", async () => {
+    const goal = await db.goal.findFirstOrThrow({ where: { kind: "emergency_fund" } });
+    await db.activity.create({
+      data: {
+        kind: "goal_contribution",
+        goalId: goal.id,
+        amountMinorUnits: 150_000, // brings total to 300,000 = 6 x 50,000
+        occurredOn: new Date("2026-08-05T00:00:00Z"),
+        trustState: "validated",
+      },
+    });
+
+    const view = await getGoalLiabilityIntelligenceView(db, ASOF, PERIOD_MONTH);
+    expect(view.emergencyFundRunway.result.kind).toBe("ok");
+    if (view.emergencyFundRunway.result.kind === "ok") {
+      expect(view.emergencyFundRunway.result.value.monthsOfRunway).toEqual({ kind: "ok", value: 6 });
+    }
+    expect(view.milestones).toContainEqual({
+      kind: "emergency_fund_target_reached",
+      label: "Emergency fund reached 6 months of essential spending",
+    });
+  });
+});

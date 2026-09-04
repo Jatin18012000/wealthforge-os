@@ -11,6 +11,7 @@ import type {
 } from "../../src/views/behavioralIntelligenceView";
 import type {
   DebtFreedomSummary,
+  EmergencyFundSummary,
   GoalCollision,
   GoalLiabilityIntelligenceView,
   GoalRadarRow,
@@ -46,8 +47,8 @@ const emptyBehavioral: BehavioralIntelligenceView = {
 const emptyGoalLiability: GoalLiabilityIntelligenceView = {
   goalFundingRadar: insight<readonly GoalRadarRow[]>(ok([])),
   goalCollisionDetector: insight<GoalCollision>(insufficient("no data")),
-  emergencyFundRunway: insight<{ readonly monthsOfRunway: number }>(
-    insufficient("D-017: no essential-expense split exists"),
+  emergencyFundRunway: insight<EmergencyFundSummary>(
+    insufficient("no Emergency Fund goal is recorded"),
   ),
   debtFreedomMeter: insight<DebtFreedomSummary>(insufficient("no data")),
   emiReleaseTimeline: insight<readonly never[]>(insufficient("no data")) as GoalLiabilityIntelligenceView["emiReleaseTimeline"],

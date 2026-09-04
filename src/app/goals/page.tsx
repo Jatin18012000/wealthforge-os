@@ -1,8 +1,10 @@
 import { Card, Computed$, EmptyState, ProgressBar } from "../../components/Primitives";
 import { db } from "../../lib/db";
 import { formatDate, formatMoney, formatRatio } from "../../presentation/format";
-import { resolveAsOf } from "../../views/context";
+import { resolveAsOf, resolveLatestPeriod } from "../../views/context";
+import { getGoalLiabilityIntelligenceView } from "../../views/goalLiabilityIntelligenceView";
 import { getGoalsView, type GoalCard } from "../../views/goalsView";
+import { createEmergencyFundGoalAction, topUpEmergencyFundAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -132,9 +134,129 @@ function GoalPanel({ card }: { card: GoalCard }) {
   );
 }
 
-export default async function GoalsPage() {
+/**
+ * Emergency Fund — set-up and manual top-up (resolves D-017,
+ * `docs/19_OPEN_DECISIONS.md`).
+ *
+ * There is no general "create a goal" feature anywhere in the app; this is
+ * narrowly scoped to the one goal kind the intelligence layer treats
+ * specially. The top-up form deliberately has no leftover-cash cap, unlike
+ * the Budget screen's "allocate leftover cash to a goal" flow — the
+ * account owner asked for a way to record an Emergency Fund contribution
+ * of any amount, independent of whether a given month's budget has been
+ * imported.
+ */
+function EmergencyFundCard({
+  hasGoal,
+  runway,
+}: {
+  hasGoal: boolean;
+  runway: Awaited<ReturnType<typeof getGoalLiabilityIntelligenceView>>["emergencyFundRunway"];
+}) {
+  if (!hasGoal) {
+    return (
+      <Card title="Set up your Emergency Fund">
+        <p className="note" style={{ marginBottom: "0.6rem" }}>
+          Once created, its balance is tracked the same way every goal&apos;s is — as a
+          running sum of contributions, never a separately-stored total. You can top it up
+          below at any time after this.
+        </p>
+        <form action={createEmergencyFundGoalAction} className="entry-form">
+          <label className="field">
+            <span className="field__label">Starting target (₹)</span>
+            <input
+              className="field__input"
+              type="text"
+              name="targetAmount"
+              inputMode="decimal"
+              placeholder="e.g. 300000"
+              required
+              aria-label="Emergency Fund starting target amount"
+            />
+          </label>
+          <button type="submit" className="button button--primary">
+            Create Emergency Fund goal
+          </button>
+        </form>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Emergency Fund">
+      {runway.result.kind === "ok" ? (
+        <div className="table-scroll" style={{ marginBottom: "0.7rem" }}>
+          <table>
+            <tbody>
+              <tr>
+                <td>Current balance</td>
+                <td className="num">{formatMoney(runway.result.value.currentBalanceMinorUnits)}</td>
+              </tr>
+              <tr>
+                <td>Target (6 months of essential spending)</td>
+                <td className="num">
+                  {runway.result.value.targetMinorUnits === null
+                    ? "—"
+                    : formatMoney(runway.result.value.targetMinorUnits)}
+                </td>
+              </tr>
+              <tr>
+                <td>Runway</td>
+                <td className="num">
+                  <Computed$ result={runway.result.value.monthsOfRunway} showReasons={false}>
+                    {(months) => <>{months.toFixed(1)} months</>}
+                  </Computed$>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="note" style={{ marginBottom: "0.7rem" }}>
+          {runway.result.reasons.join("; ")}
+        </p>
+      )}
+      <form action={topUpEmergencyFundAction} className="entry-form">
+        <label className="field">
+          <span className="field__label">Top up by (₹)</span>
+          <input
+            className="field__input"
+            type="text"
+            name="amount"
+            inputMode="decimal"
+            placeholder="e.g. 5000"
+            required
+            aria-label="Emergency Fund top-up amount"
+          />
+        </label>
+        <button type="submit" className="button button--primary">
+          Add to Emergency Fund
+        </button>
+      </form>
+    </Card>
+  );
+}
+
+export default async function GoalsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const one = (key: string): string => {
+    const value = params[key];
+    return typeof value === "string" ? value : "";
+  };
+
   const asOf = await resolveAsOf(db);
+  const latestPeriodMonth = await resolveLatestPeriod(db);
   const view = await getGoalsView(db, asOf);
+  const goalLiability = await getGoalLiabilityIntelligenceView(db, asOf, latestPeriodMonth);
+  const hasEmergencyFundGoal = [...view.active, ...view.inactive].some(
+    (card) => card.goal.kind === "emergency_fund",
+  );
+
+  const error = one("error");
 
   return (
     <>
@@ -147,6 +269,29 @@ export default async function GoalsPage() {
       </div>
 
       <div className="stack">
+        {error !== "" && (
+          <p className="alert alert--caution">
+            <span className="alert__title">Nothing was changed.</span> {error}
+          </p>
+        )}
+        {one("created") !== "" && (
+          <p className="alert">
+            <span className="alert__title">Emergency Fund goal created.</span> Top it up below
+            whenever you like.
+          </p>
+        )}
+        {one("toppedUp") !== "" && (
+          <p className="alert">
+            <span className="alert__title">Emergency Fund topped up.</span> Every screen now
+            reflects it.
+          </p>
+        )}
+
+        <EmergencyFundCard
+          hasGoal={hasEmergencyFundGoal}
+          runway={goalLiability.emergencyFundRunway}
+        />
+
         <h2 className="section-heading">Active, in priority order</h2>
         {view.active.length === 0 ? (
           <Card>

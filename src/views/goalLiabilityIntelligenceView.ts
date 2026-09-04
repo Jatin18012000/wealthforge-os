@@ -5,10 +5,14 @@ import {
   addMonthsClamped,
   buildInsight,
   buildScenarioResult,
+  computeEmergencyFundRunwayMonths,
+  computeEmergencyFundTargetMinorUnits,
   computeGoalProgress,
   daysBetween,
+  detectEmergencyFundMilestone,
   detectGoalMilestones,
   detectLiabilityMilestones,
+  EMERGENCY_FUND_TARGET_MONTHS,
   insufficient,
   ok,
   projectEmiRelease,
@@ -18,6 +22,7 @@ import {
   summarizeMonth,
   type Computed,
   type EmiPaymentInput,
+  type GoalActivityInput,
   type GoalInput,
   type GoalProgress,
   type GoalProjection,
@@ -134,7 +139,7 @@ export interface GoalTradeOffRow {
 export interface GoalLiabilityIntelligenceView {
   readonly goalFundingRadar: Insight<readonly GoalRadarRow[]>;
   readonly goalCollisionDetector: Insight<GoalCollision>;
-  readonly emergencyFundRunway: Insight<{ readonly monthsOfRunway: number }>;
+  readonly emergencyFundRunway: Insight<EmergencyFundSummary>;
   readonly debtFreedomMeter: Insight<DebtFreedomSummary>;
   readonly emiReleaseTimeline: Insight<readonly EmiReleaseRow[]>;
   readonly goalTradeOffSimulator: Insight<ScenarioResult<readonly GoalTradeOffRow[]>>;
@@ -187,6 +192,15 @@ export async function getGoalLiabilityIntelligenceView(
   const goalFundingRadar = buildGoalFundingRadar(radarRows, asOf);
   const emiReleaseTimeline = buildEmiReleaseTimeline(liabilities, payments, asOf);
 
+  const essentialSpendMinorUnits =
+    capacity !== null && capacity.kind === "ok" ? capacity.value.committedOutflowMinorUnits : null;
+  const emergencyFundRunway = buildEmergencyFundRunway(
+    goals,
+    goalActivities,
+    essentialSpendMinorUnits,
+    asOf,
+  );
+
   const goalMilestones = detectGoalMilestones(
     radarRows.map((row) => ({ name: row.goal.name, progressRatio: row.progress.progressRatio })),
   );
@@ -199,15 +213,21 @@ export async function getGoalLiabilityIntelligenceView(
         )
       : [],
   );
+  const emergencyFundMilestones = detectEmergencyFundMilestone(
+    emergencyFundRunway.result.kind === "ok"
+      ? emergencyFundRunway.result.value.monthsOfRunway
+      : insufficient("Emergency Fund runway is not available"),
+    EMERGENCY_FUND_TARGET_MONTHS,
+  );
 
   return {
     goalFundingRadar,
     goalCollisionDetector: buildGoalCollisionDetector(active, radarRows, capacityMinorUnits, asOf),
-    emergencyFundRunway: buildEmergencyFundRunway(asOf),
+    emergencyFundRunway,
     debtFreedomMeter: buildDebtFreedomMeter(liabilities, payments, asOf),
     emiReleaseTimeline,
     goalTradeOffSimulator: buildGoalTradeOffSimulator(active, radarRows, capacityMinorUnits, asOf),
-    milestones: [...goalMilestones, ...liabilityMilestones],
+    milestones: [...goalMilestones, ...liabilityMilestones, ...emergencyFundMilestones],
   };
 }
 
@@ -325,15 +345,72 @@ function buildGoalCollisionDetector(
 
 // --- Emergency Fund Runway -------------------------------------------------------
 
-function buildEmergencyFundRunway(asOf: Date): Insight<{ readonly monthsOfRunway: number }> {
+export interface EmergencyFundSummary {
+  readonly currentBalanceMinorUnits: number;
+  /** 6 months of essential spending — null only when essential spend isn't known yet. */
+  readonly targetMinorUnits: number | null;
+  readonly essentialSpendMinorUnits: number | null;
+  readonly monthsOfRunway: Computed<number>;
+}
+
+/**
+ * D-017 (`docs/19_OPEN_DECISIONS.md`) is resolved: the account owner has
+ * defined essential spending, for this purpose, as a month's total
+ * expenses plus EMIs (`MonthlyBudget.committedOutflowMinorUnits`) — not
+ * something invented here. The balance and target are reported as soon as
+ * an Emergency Fund goal exists; only `monthsOfRunway` itself depends on
+ * essential spending being known for the latest complete month, and stays
+ * `insufficient-data` on its own until then rather than gating the whole
+ * widget.
+ */
+function buildEmergencyFundRunway(
+  goals: readonly GoalInput[],
+  goalActivities: readonly GoalActivityInput[],
+  essentialSpendMinorUnits: number | null,
+  asOf: Date,
+): Insight<EmergencyFundSummary> {
+  const emergencyFundGoals = goals.filter((g) => g.kind === "emergency_fund");
+
+  if (emergencyFundGoals.length === 0) {
+    return buildInsight({
+      metric: EMERGENCY_FUND_RUNWAY_METRIC,
+      result: insufficient("no Emergency Fund goal is recorded"),
+      asOf,
+      calculationBasis:
+        "Divides the Emergency Fund goal's current balance by the latest complete month's expenses + EMIs, times 6 for the target. Requires a goal of kind 'emergency_fund'.",
+    });
+  }
+  if (emergencyFundGoals.length > 1) {
+    return buildInsight({
+      metric: EMERGENCY_FUND_RUNWAY_METRIC,
+      result: insufficient(
+        `${emergencyFundGoals.length} Emergency Fund goals are recorded — ambiguous which balance to use`,
+      ),
+      asOf,
+      calculationBasis: "Requires exactly one goal of kind 'emergency_fund'.",
+    });
+  }
+
+  const goal = emergencyFundGoals[0] as GoalInput;
+  const progress = computeGoalProgress(goal, goalActivities);
+  const runwayMonths = computeEmergencyFundRunwayMonths(
+    progress.currentAmountMinorUnits,
+    essentialSpendMinorUnits ?? 0,
+  );
+
   return buildInsight({
     metric: EMERGENCY_FUND_RUNWAY_METRIC,
-    result: insufficient(
-      "no essential/discretionary expense split exists in the budget data model (docs/19_OPEN_DECISIONS.md, D-017); runway is never approximated from total spending, which would conflate discretionary and essential expense",
-    ),
+    result: ok({
+      currentBalanceMinorUnits: progress.currentAmountMinorUnits,
+      targetMinorUnits:
+        essentialSpendMinorUnits === null
+          ? null
+          : computeEmergencyFundTargetMinorUnits(essentialSpendMinorUnits),
+      essentialSpendMinorUnits,
+      monthsOfRunway: runwayMonths,
+    }),
     asOf,
-    calculationBasis:
-      "Would divide the emergency fund's current balance (see Goal Funding Radar) by average monthly essential spending, once an essential-expense field exists. Not computed today per D-017.",
+    calculationBasis: `Current balance ÷ the latest complete month's expenses + EMIs; target = ${EMERGENCY_FUND_TARGET_MONTHS} × that monthly figure (docs/19_OPEN_DECISIONS.md, D-017).`,
   });
 }
 
