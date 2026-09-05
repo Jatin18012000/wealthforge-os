@@ -2,8 +2,16 @@
 
 ## Tooling
 
-- **Vitest** — unit, domain, and integration tests.
-- **Playwright** — E2E and UI tests, from M6 onward.
+- **Vitest** — unit, domain, and integration tests. Persistence/integration
+  tests use `tests/setup/testDb.ts`, an isolated temp SQLite database per
+  test run — never `data/wealthforge.db`.
+- **Playwright** — E2E and UI tests, from M6 onward. `pnpm e2e` runs against
+  its own database (`.env.test`'s `DATABASE_URL`, `data/e2e-test.db`), never
+  `data/wealthforge.db`. `playwright.config.ts` loads `.env.test` explicitly,
+  refuses to start if it points at the real database, and its
+  `webServer.command` migrates and seeds that database with demo fixtures
+  before starting the app, on every run — so `pnpm e2e` is always safe to
+  run against a real installation with real data.
 - Tests are written alongside the feature they cover, in the same change —
   never batched into a later "add tests" pass (`CLAUDE.md` §9).
 

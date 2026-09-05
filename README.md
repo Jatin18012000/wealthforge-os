@@ -156,6 +156,12 @@ pnpm e2e
 pnpm build
 ```
 
+`pnpm e2e` never touches `data/wealthforge.db`. It runs against its own
+database (`.env.test`, `data/e2e-test.db`), which `playwright.config.ts`
+migrates and seeds with demo fixtures before every run — so E2E can be
+run at any time, on a real installation with real data, with no risk to
+it.
+
 As of this release: 389 unit/integration tests, 122 Playwright E2E tests
 (across laptop and iPad viewports) — 511 automated tests total, all
 passing, alongside a clean typecheck, lint, and production build. See
