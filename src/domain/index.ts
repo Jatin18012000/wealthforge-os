@@ -164,10 +164,13 @@ export {
   detectLiabilityMilestones,
   detectEmergencyFundMilestone,
   detectSavingsRateMilestone,
+  detectPortfolioValueMilestones,
+  PORTFOLIO_VALUE_MILESTONE_THRESHOLDS,
   type Milestone,
   type MilestoneKind,
   type GoalMilestoneCandidate,
   type LiabilityMilestoneCandidate,
+  type PortfolioValueThreshold,
 } from "./milestones";
 export {
   EMERGENCY_FUND_TARGET_MONTHS,

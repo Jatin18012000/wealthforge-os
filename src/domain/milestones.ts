@@ -1,3 +1,4 @@
+import { rupeesToMinorUnits } from "./money";
 import type { Computed } from "./result";
 
 /**
@@ -9,22 +10,20 @@ import type { Computed } from "./result";
  * payments remaining — both derived from already-computed fields
  * (`GoalProgress.progressRatio`, `ReleaseSchedule.paymentsRemaining`).
  *
- * The Emergency Fund and Overall Savings Rate milestones were added once
- * the account owner supplied the two thresholds that were missing (6
- * months of essential spending; 25% of income) — see
- * `src/domain/emergencyFund.ts` and `src/domain/savingsRate.ts`. Those
- * numbers are the owner's own stated targets, not invented here.
- *
- * The portfolio-value milestone remains deliberately NOT implemented:
- * no threshold for it has been supplied, and guessing one would violate
- * "never invent a new financial fact," the same reasoning as D-017.
+ * The Emergency Fund, Overall Savings Rate, and Portfolio Value milestones
+ * were added once the account owner supplied the thresholds that were
+ * missing (6 months of essential spending; 25% of income; a ₹10L → ₹25L →
+ * ₹50L → ₹1Cr chain) — see `src/domain/emergencyFund.ts` and
+ * `src/domain/savingsRate.ts` for the first two. These numbers are the
+ * owner's own stated targets, never invented here.
  */
 
 export type MilestoneKind =
   | "goal_achieved"
   | "liability_paid_off"
   | "emergency_fund_target_reached"
-  | "savings_rate_target_reached";
+  | "savings_rate_target_reached"
+  | "portfolio_value_target_reached";
 
 export interface Milestone {
   readonly kind: MilestoneKind;
@@ -94,4 +93,38 @@ export function detectSavingsRateMilestone(
       label: `Overall savings rate reached ${Math.round(targetRatio * 100)}% of income`,
     },
   ];
+}
+
+export interface PortfolioValueThreshold {
+  readonly amountMinorUnits: number;
+  /** Display label for this rung of the chain — a fact about the owner's stated target, not a formatting rule. */
+  readonly label: string;
+}
+
+/** The owner's own stated chain: ₹10L → ₹25L → ₹50L → ₹1Cr. */
+export const PORTFOLIO_VALUE_MILESTONE_THRESHOLDS: readonly PortfolioValueThreshold[] = [
+  { amountMinorUnits: rupeesToMinorUnits(1_000_000), label: "₹10L" },
+  { amountMinorUnits: rupeesToMinorUnits(2_500_000), label: "₹25L" },
+  { amountMinorUnits: rupeesToMinorUnits(5_000_000), label: "₹50L" },
+  { amountMinorUnits: rupeesToMinorUnits(10_000_000), label: "₹1Cr" },
+];
+
+/**
+ * The Portfolio Value milestones: one entry per rung of the owner's stated
+ * chain that the current portfolio value has reached (or exceeded).
+ * `currentValue` is whatever the Portfolio X-Ray / Command Center headline
+ * already computed — this function only compares it against each rung, it
+ * introduces no new valuation.
+ */
+export function detectPortfolioValueMilestones(
+  currentValue: Computed<number>,
+  thresholds: readonly PortfolioValueThreshold[],
+): readonly Milestone[] {
+  if (currentValue.kind !== "ok") return [];
+  return thresholds
+    .filter((threshold) => currentValue.value >= threshold.amountMinorUnits)
+    .map((threshold) => ({
+      kind: "portfolio_value_target_reached" as const,
+      label: `Portfolio crossed ${threshold.label}`,
+    }));
 }

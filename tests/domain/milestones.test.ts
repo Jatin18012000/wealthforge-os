@@ -4,7 +4,9 @@ import {
   detectEmergencyFundMilestone,
   detectGoalMilestones,
   detectLiabilityMilestones,
+  detectPortfolioValueMilestones,
   detectSavingsRateMilestone,
+  PORTFOLIO_VALUE_MILESTONE_THRESHOLDS,
 } from "../../src/domain/milestones";
 
 describe("detectGoalMilestones", () => {
@@ -99,5 +101,52 @@ describe("detectSavingsRateMilestone", () => {
 
   it("does not flag on insufficient data, rather than guessing", () => {
     expect(detectSavingsRateMilestone(insufficient("no income recorded"), 0.25)).toHaveLength(0);
+  });
+});
+
+describe("PORTFOLIO_VALUE_MILESTONE_THRESHOLDS", () => {
+  it("is the owner's stated chain: ₹10L → ₹25L → ₹50L → ₹1Cr, in minor units", () => {
+    expect(PORTFOLIO_VALUE_MILESTONE_THRESHOLDS).toEqual([
+      { amountMinorUnits: 1_000_000 * 100, label: "₹10L" },
+      { amountMinorUnits: 2_500_000 * 100, label: "₹25L" },
+      { amountMinorUnits: 5_000_000 * 100, label: "₹50L" },
+      { amountMinorUnits: 10_000_000 * 100, label: "₹1Cr" },
+    ]);
+  });
+});
+
+describe("detectPortfolioValueMilestones", () => {
+  it("flags every rung the current value has reached, lowest first", () => {
+    const result = detectPortfolioValueMilestones(
+      ok(3_000_000 * 100), // ₹30L — past ₹10L and ₹25L, short of ₹50L
+      PORTFOLIO_VALUE_MILESTONE_THRESHOLDS,
+    );
+    expect(result).toEqual([
+      { kind: "portfolio_value_target_reached", label: "Portfolio crossed ₹10L" },
+      { kind: "portfolio_value_target_reached", label: "Portfolio crossed ₹25L" },
+    ]);
+  });
+
+  it("flags a rung reached exactly", () => {
+    const result = detectPortfolioValueMilestones(ok(1_000_000 * 100), PORTFOLIO_VALUE_MILESTONE_THRESHOLDS);
+    expect(result).toEqual([{ kind: "portfolio_value_target_reached", label: "Portfolio crossed ₹10L" }]);
+  });
+
+  it("flags nothing below the first rung", () => {
+    const result = detectPortfolioValueMilestones(ok(500_000 * 100), PORTFOLIO_VALUE_MILESTONE_THRESHOLDS);
+    expect(result).toHaveLength(0);
+  });
+
+  it("flags every rung once the value clears the top of the chain", () => {
+    const result = detectPortfolioValueMilestones(ok(20_000_000 * 100), PORTFOLIO_VALUE_MILESTONE_THRESHOLDS);
+    expect(result).toHaveLength(4);
+  });
+
+  it("does not flag on insufficient data, rather than guessing", () => {
+    const result = detectPortfolioValueMilestones(
+      insufficient("no holdings could be valued"),
+      PORTFOLIO_VALUE_MILESTONE_THRESHOLDS,
+    );
+    expect(result).toHaveLength(0);
   });
 });

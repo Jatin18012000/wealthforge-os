@@ -10,7 +10,13 @@ import {
   ProgressBar,
   StatTile,
 } from "../components/Primitives";
-import { resolvePeriod, resolveVisibleDashboardWidgets } from "../domain";
+import {
+  detectPortfolioValueMilestones,
+  PORTFOLIO_VALUE_MILESTONE_THRESHOLDS,
+  resolvePeriod,
+  resolveVisibleDashboardWidgets,
+  type Computed,
+} from "../domain";
 import { db } from "../lib/db";
 import {
   formatDate,
@@ -145,7 +151,19 @@ export default async function CommandCenterPage({
   const behavioral = await getBehavioralIntelligenceView(db, asOf);
   const scenarios = await getScenarioEngineView(db, asOf, latestPeriod);
   const savingsRate = await getOverallSavingsRateView(db, asOf, latestPeriod);
-  const allMilestones = [...goalLiability.milestones, ...savingsRate.milestones];
+  const portfolioValue: Computed<number> =
+    view.portfolio.valuation.kind === "ok"
+      ? { kind: "ok", value: view.portfolio.valuation.value.totalMinorUnits }
+      : view.portfolio.valuation;
+  const portfolioValueMilestones = detectPortfolioValueMilestones(
+    portfolioValue,
+    PORTFOLIO_VALUE_MILESTONE_THRESHOLDS,
+  );
+  const allMilestones = [
+    ...goalLiability.milestones,
+    ...savingsRate.milestones,
+    ...portfolioValueMilestones,
+  ];
 
   const attention = buildAttentionPanel({
     investment,
@@ -1005,11 +1023,10 @@ export default async function CommandCenterPage({
       <Card title="Milestones" key="milestones">
         <p className="note" style={{ marginBottom: "0.6rem" }}>
           A goal reaching 100% funded, a liability&apos;s EMI schedule reaching zero payments
-          remaining, an Emergency Fund reaching 6 months of essential spending, or an
-          Overall Savings Rate reaching 25% of income — all already-computed facts, restated
-          here (v1.1.1 F8). A portfolio-value milestone is not shown: it would require a
-          threshold no document in this app defines, and inventing one would misrepresent a
-          fact rather than restate one.
+          remaining, an Emergency Fund reaching 6 months of essential spending, an Overall
+          Savings Rate reaching 25% of income, or the portfolio crossing a rung of your
+          ₹10L → ₹25L → ₹50L → ₹1Cr chain — all already-computed facts, restated here
+          (v1.1.1 F8), each threshold your own stated target rather than one invented here.
         </p>
         {allMilestones.length === 0 ? (
           <EmptyState>No milestone reached yet.</EmptyState>

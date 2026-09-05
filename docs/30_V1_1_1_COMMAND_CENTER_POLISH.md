@@ -228,7 +228,7 @@ over data the schema already stores.
   by design, since anything more would risk inventing a scoring system
   this project's rules do not sanction.
 
-## Addendum — follow-up pass: F2, F4, F6, F8 (partial), F9
+## Addendum — follow-up pass: F2, F4, F6, F8, F9
 
 Everything above this line is the original bounded pass. In a follow-up
 pass, F2, F4, F6, F9, and the two safe sub-items of F8 were implemented,
@@ -257,14 +257,16 @@ below.
   already reused once for the Daily Brief) scoped to the most recently
   completed month, reusing Analytics' own month-over-month comparison and
   the Budget screen's own monthly summary/plan-vs-reality.
-- **F8 (partial) — Financial Milestones**: `src/domain/milestones.ts`
-  implements only the two sub-items with zero invented threshold — a goal
-  reaching 100% funded, and a liability's EMI schedule reaching zero
-  payments remaining — surfaced in a new "Milestones" Command Center
-  widget. The emergency-fund, portfolio-value, and savings-rate
-  milestones **remain unimplemented**: each still requires a threshold
-  this repository does not define, and the widget's own copy says so
-  rather than leaving it silent.
+- **F8 — Financial Milestones**: `src/domain/milestones.ts` started with
+  the two sub-items needing zero invented threshold (a goal reaching 100%
+  funded; a liability's EMI schedule reaching zero payments remaining),
+  surfaced in a new "Milestones" Command Center widget. The account owner
+  then supplied the remaining thresholds in a later exchange: 6 months of
+  essential spending for Emergency Fund (also resolving D-017), 25% of
+  income for Overall Savings Rate, and a ₹10L → ₹25L → ₹50L → ₹1Cr chain
+  for portfolio value. All five sub-items are now implemented — F8 is
+  complete, with every threshold traceable to something the owner
+  explicitly stated rather than one invented here.
 - **F5 (Financial Focus Mode) was not built** in this batch. It depends
   on F4, which now exists, so it is unblocked — but it was not part of
   what was asked for and is left for a future pass rather than assumed.
