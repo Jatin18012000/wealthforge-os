@@ -783,6 +783,333 @@ test.describe("Data Center", () => {
   });
 });
 
+test.describe("Data Center — manual record management (D-018)", () => {
+  test("renders the three registration forms and the manage-records tables", async ({
+    page,
+  }) => {
+    await page.goto("/data-center");
+
+    for (const title of [
+      "Register a new goal",
+      "Register a new EMI / liability",
+      "Register a new insurance policy",
+      "Manage records",
+    ]) {
+      await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    }
+    await expect(page.getByRole("heading", { name: "Goals", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Liabilities / EMIs" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Insurance policies" }),
+    ).toBeVisible();
+  });
+
+  test("registers a new goal and it appears on the Goals screen", async ({
+    page,
+  }, testInfo) => {
+    const name = `E2E Goal ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const goalForm = page.locator("form", { has: page.locator('select[name="kind"]') }).filter({
+      has: page.locator('input[name="targetAmount"]'),
+    });
+    await goalForm.locator('input[name="name"]').fill(name);
+    await goalForm.locator('select[name="kind"]').selectOption("custom");
+    await goalForm.locator('input[name="targetAmount"]').fill("50000");
+    await goalForm.getByRole("button", { name: "Register goal" }).click();
+
+    await page.waitForURL(/data-center\?recordCreated=/);
+    await expect(page.getByText("Created.")).toBeVisible();
+    await expect(page.getByText(`Goal "${name}"`)).toBeVisible();
+
+    // Shows up in this screen's own Manage records table...
+    await expect(page.locator("tr", { hasText: name })).toBeVisible();
+
+    // ...and is immediately usable on the Goals screen, with its own
+    // top-up form, exactly like an imported goal would be.
+    await page.goto("/goals");
+    const goalCard = page.locator(".card", { hasText: name });
+    await expect(goalCard).toBeVisible();
+    await expect(goalCard.locator('input[name="amount"]')).toBeVisible();
+  });
+
+  test("refuses a second Emergency Fund goal", async ({ page }) => {
+    await page.goto("/data-center");
+    const goalForm = page.locator("form", { has: page.locator('select[name="kind"]') }).filter({
+      has: page.locator('input[name="targetAmount"]'),
+    });
+    await goalForm.locator('input[name="name"]').fill("Duplicate Emergency Fund");
+    await goalForm.locator('select[name="kind"]').selectOption("emergency_fund");
+    await goalForm.locator('input[name="targetAmount"]').fill("100000");
+    await goalForm.getByRole("button", { name: "Register goal" }).click();
+
+    await page.waitForURL(/data-center\?error=/);
+    await expect(page.getByText(/An Emergency Fund goal already exists/)).toBeVisible();
+  });
+
+  test("registers a new EMI/liability and derives tenure and EMI from the dates and rate", async ({
+    page,
+  }, testInfo) => {
+    const name = `E2E Liability ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const liabilityForm = page.locator("form", {
+      has: page.locator('input[name="totalPrice"]'),
+    });
+    await liabilityForm.locator('input[name="name"]').fill(name);
+    await liabilityForm.locator('select[name="kind"]').selectOption("other");
+    await liabilityForm.locator('input[name="totalPrice"]').fill("60000");
+    await liabilityForm.locator('input[name="amountPaidUpfront"]').fill("0");
+    await liabilityForm.locator('input[name="startDate"]').fill("2026-01-01");
+    await liabilityForm.locator('input[name="endDate"]').fill("2026-07-01");
+    await liabilityForm.locator('input[name="annualInterestRate"]').fill("0");
+    await liabilityForm.getByRole("button", { name: "Register liability" }).click();
+
+    await page.waitForURL(/data-center\?recordCreated=/);
+    // 6 whole calendar months between the two dates, 0% interest — a flat
+    // 60000 / 6 = 10000.00/month, computed by computeEmiAmount rather than
+    // asserted against a hardcoded schedule.
+    await expect(
+      page.getByText(`Liability "${name}" — 10000.00/month for 6 months`),
+    ).toBeVisible();
+
+    await page.goto("/liabilities");
+    const liabilityCard = page.locator(".card", { hasText: name });
+    await expect(liabilityCard).toBeVisible();
+    await expect(
+      liabilityCard.locator("tr", { hasText: "Monthly EMI" }).locator("td.num"),
+    ).toContainText("10,000");
+    await expect(
+      liabilityCard.locator("tr", { hasText: "Tenure" }).locator("td.num"),
+    ).toContainText("6 months");
+    // Its own uncapped payment quick-add, exactly like an imported liability.
+    await expect(liabilityCard.locator('input[name="amount"]')).toBeVisible();
+  });
+
+  test("refuses a liability whose upfront payment covers the full price", async ({
+    page,
+  }, testInfo) => {
+    const name = `E2E Overpaid ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const liabilityForm = page.locator("form", {
+      has: page.locator('input[name="totalPrice"]'),
+    });
+    await liabilityForm.locator('input[name="name"]').fill(name);
+    await liabilityForm.locator('input[name="totalPrice"]').fill("50000");
+    await liabilityForm.locator('input[name="amountPaidUpfront"]').fill("50000");
+    await liabilityForm.locator('input[name="startDate"]').fill("2026-01-01");
+    await liabilityForm.locator('input[name="endDate"]').fill("2026-07-01");
+    await liabilityForm.getByRole("button", { name: "Register liability" }).click();
+
+    await page.waitForURL(/data-center\?error=/);
+    await expect(page.getByText(/nothing to finance as an EMI/)).toBeVisible();
+  });
+
+  test("registers a new insurance policy and it appears on the Insurance screen", async ({
+    page,
+  }, testInfo) => {
+    const provider = `E2E Insurer ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const insuranceForm = page.locator("form", {
+      has: page.locator('input[name="insuredParty"]'),
+    });
+    await insuranceForm.locator('select[name="kind"]').selectOption("term");
+    await insuranceForm.locator('input[name="insuredParty"]').fill("Self");
+    await insuranceForm.locator('input[name="provider"]').fill(provider);
+    await insuranceForm.locator('input[name="coverAmount"]').fill("1000000");
+    await insuranceForm.getByRole("button", { name: "Register policy" }).click();
+
+    await page.waitForURL(/data-center\?recordCreated=/);
+    await expect(page.getByText(`Insurance policy for Self`)).toBeVisible();
+    await expect(page.locator("tr", { hasText: provider })).toBeVisible();
+
+    await page.goto("/insurance");
+    await expect(page.getByText(provider)).toBeVisible();
+  });
+
+  test("closes a goal — kept on record, excluded from the active list", async ({
+    page,
+  }, testInfo) => {
+    const name = `E2E Close Goal ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const goalForm = page.locator("form", { has: page.locator('select[name="kind"]') }).filter({
+      has: page.locator('input[name="targetAmount"]'),
+    });
+    await goalForm.locator('input[name="name"]').fill(name);
+    await goalForm.locator('input[name="targetAmount"]').fill("20000");
+    await goalForm.getByRole("button", { name: "Register goal" }).click();
+    await page.waitForURL(/data-center\?recordCreated=/);
+
+    const row = page.locator("tr", { hasText: name });
+    await row.getByRole("button", { name: "Close" }).click();
+
+    await page.waitForURL(/data-center\?recordClosed=/);
+    await expect(page.getByText("Closed.")).toBeVisible();
+    await expect(page.getByText(/is kept on the record but no longer counted as active/)).toBeVisible();
+
+    const closedRow = page.locator("tr", { hasText: name });
+    await expect(closedRow).toContainText("cancelled");
+    // No Close button left, since it is already closed — only Delete.
+    await expect(closedRow.getByRole("button", { name: "Close" })).toHaveCount(0);
+  });
+
+  test("deletes a goal with no history outright", async ({ page }, testInfo) => {
+    const name = `E2E Delete Goal ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const goalForm = page.locator("form", { has: page.locator('select[name="kind"]') }).filter({
+      has: page.locator('input[name="targetAmount"]'),
+    });
+    await goalForm.locator('input[name="name"]').fill(name);
+    await goalForm.locator('input[name="targetAmount"]').fill("15000");
+    await goalForm.getByRole("button", { name: "Register goal" }).click();
+    await page.waitForURL(/data-center\?recordCreated=/);
+
+    await page.locator("tr", { hasText: name }).getByRole("button", { name: "Delete" }).click();
+
+    await page.waitForURL(/data-center\?recordDeleted=/);
+    await expect(page.getByText("Deleted.")).toBeVisible();
+    await expect(page.getByText(/had no recorded history, so it was removed outright/)).toBeVisible();
+    await expect(page.locator("tr", { hasText: name })).toHaveCount(0);
+  });
+
+  test("blocks deleting a goal once it has contribution history, and offers Close instead", async ({
+    page,
+  }, testInfo) => {
+    const name = `E2E Funded Goal ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const goalForm = page.locator("form", { has: page.locator('select[name="kind"]') }).filter({
+      has: page.locator('input[name="targetAmount"]'),
+    });
+    await goalForm.locator('input[name="name"]').fill(name);
+    await goalForm.locator('input[name="targetAmount"]').fill("30000");
+    await goalForm.getByRole("button", { name: "Register goal" }).click();
+    await page.waitForURL(/data-center\?recordCreated=/);
+
+    // Give it one contribution via its own quick-add on the Goals screen —
+    // the same uncapped top-up path a real contribution would use.
+    await page.goto("/goals");
+    const goalCard = page.locator(".card", { hasText: name });
+    await goalCard.locator('input[name="amount"]').fill("500");
+    await goalCard.getByRole("button", { name: "Add" }).click();
+    await page.waitForURL(/goals\?toppedUp=1/);
+
+    await page.goto("/data-center");
+    await page.locator("tr", { hasText: name }).getByRole("button", { name: "Delete" }).click();
+
+    await page.waitForURL(/data-center\?error=/);
+    await expect(page.getByText(/recorded contribution\(s\)\/withdrawal\(s\) — close it instead/)).toBeVisible();
+    // Refused, not removed — still on the record.
+    await expect(page.locator("tr", { hasText: name })).toBeVisible();
+  });
+
+  test("closes a liability and it is dropped from the active Liabilities screen", async ({
+    page,
+  }, testInfo) => {
+    const name = `E2E Close Liability ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const liabilityForm = page.locator("form", {
+      has: page.locator('input[name="totalPrice"]'),
+    });
+    await liabilityForm.locator('input[name="name"]').fill(name);
+    await liabilityForm.locator('input[name="totalPrice"]').fill("12000");
+    await liabilityForm.locator('input[name="startDate"]').fill("2026-01-01");
+    await liabilityForm.locator('input[name="endDate"]').fill("2026-04-01");
+    await liabilityForm.locator('input[name="annualInterestRate"]').fill("0");
+    await liabilityForm.getByRole("button", { name: "Register liability" }).click();
+    await page.waitForURL(/data-center\?recordCreated=/);
+
+    await page.goto("/liabilities");
+    await expect(page.locator(".card", { hasText: name })).toBeVisible();
+
+    await page.goto("/data-center");
+    await page.locator("tr", { hasText: name }).getByRole("button", { name: "Close" }).click();
+    await page.waitForURL(/data-center\?recordClosed=/);
+    await expect(page.locator("tr", { hasText: name })).toContainText(/closed/);
+
+    // Excluded from active calculations — loadLiabilities filters
+    // closedAt: null — so its card no longer renders on /liabilities,
+    // even though it is still visible, unfiltered, in Data Center.
+    await page.goto("/liabilities");
+    await expect(page.locator(".card", { hasText: name })).toHaveCount(0);
+  });
+
+  test("blocks deleting a liability once it has a recorded payment, and offers Close instead", async ({
+    page,
+  }, testInfo) => {
+    const name = `E2E Funded Liability ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const liabilityForm = page.locator("form", {
+      has: page.locator('input[name="totalPrice"]'),
+    });
+    await liabilityForm.locator('input[name="name"]').fill(name);
+    await liabilityForm.locator('input[name="totalPrice"]').fill("24000");
+    await liabilityForm.locator('input[name="startDate"]').fill("2026-01-01");
+    await liabilityForm.locator('input[name="endDate"]').fill("2026-04-01");
+    await liabilityForm.locator('input[name="annualInterestRate"]').fill("0");
+    await liabilityForm.getByRole("button", { name: "Register liability" }).click();
+    await page.waitForURL(/data-center\?recordCreated=/);
+
+    await page.goto("/liabilities");
+    const liabilityCard = page.locator(".card", { hasText: name });
+    await liabilityCard.locator('input[name="amount"]').fill("1000");
+    await liabilityCard.getByRole("button", { name: "Add" }).click();
+    await page.waitForURL(/liabilities\?paymentRecorded=1/);
+
+    await page.goto("/data-center");
+    await page.locator("tr", { hasText: name }).getByRole("button", { name: "Delete" }).click();
+
+    await page.waitForURL(/data-center\?error=/);
+    await expect(page.getByText(/recorded payment\(s\) — close it instead/)).toBeVisible();
+    await expect(page.locator("tr", { hasText: name })).toBeVisible();
+  });
+
+  test("deletes an insurance policy outright — no payment ledger to protect", async ({
+    page,
+  }, testInfo) => {
+    const provider = `E2E Delete Insurer ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const insuranceForm = page.locator("form", {
+      has: page.locator('input[name="insuredParty"]'),
+    });
+    await insuranceForm.locator('input[name="insuredParty"]').fill("Self");
+    await insuranceForm.locator('input[name="provider"]').fill(provider);
+    await insuranceForm.getByRole("button", { name: "Register policy" }).click();
+    await page.waitForURL(/data-center\?recordCreated=/);
+
+    await page.locator("tr", { hasText: provider }).getByRole("button", { name: "Delete" }).click();
+    await page.waitForURL(/data-center\?recordDeleted=/);
+    await expect(page.getByText("Deleted.")).toBeVisible();
+    await expect(page.locator("tr", { hasText: provider })).toHaveCount(0);
+  });
+
+  test("closes an insurance policy", async ({ page }, testInfo) => {
+    const provider = `E2E Close Insurer ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/data-center");
+    const insuranceForm = page.locator("form", {
+      has: page.locator('input[name="insuredParty"]'),
+    });
+    await insuranceForm.locator('input[name="insuredParty"]').fill("Self");
+    await insuranceForm.locator('input[name="provider"]').fill(provider);
+    await insuranceForm.getByRole("button", { name: "Register policy" }).click();
+    await page.waitForURL(/data-center\?recordCreated=/);
+
+    await page.locator("tr", { hasText: provider }).getByRole("button", { name: "Close" }).click();
+    await page.waitForURL(/data-center\?recordClosed=/);
+    await expect(page.locator("tr", { hasText: provider })).toContainText("cancelled");
+  });
+});
+
 test.describe("Market", () => {
   test("lists every tracked index, including the one with no free source", async ({
     page,
