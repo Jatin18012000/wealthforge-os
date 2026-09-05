@@ -148,7 +148,7 @@ pledge flags the holding `needs_review` rather than guessing.
 excluded from Available. **Needed from the user:** confirmation, ideally with
 a statement in which something is pledged.
 
-### D-014: Mutual funds held outside Zerodha
+### D-014: Mutual funds held outside Zerodha — RESOLVED
 
 The budget plans monthly contributions to three mutual funds ("Index fund",
 "Flexi cap", "Midcap"), but the Zerodha `Mutual Funds` sheet is empty in all
@@ -156,8 +156,16 @@ three statements — they are held elsewhere (Groww, per the specification's
 tools table). No statement for them was supplied.
 **Impact:** portfolio value and net worth exclude these holdings entirely,
 and Plan vs Reality cannot compare planned against actual for them.
-**Needed from the user:** a Groww (or equivalent) holdings export, or
-confirmation that these should be tracked by manual entry.
+
+**Resolution (2026-09-05, `docs/32_V1_2_PRODUCT_DIRECTION.md` Q5):** a
+holdings-export CSV adapter for the platform the owner actually uses,
+following the same source-adapter pattern as the existing Zerodha holdings
+adapter. Chosen over a CAMS/KFintech consolidated statement (CAS) parser,
+which would cover every platform at once but is heavier, and over pure
+manual entry. Once the instruments exist, the already-built AMFI NAV
+fetcher prices them daily at no cost.
+**Still needed:** which platform (Groww and Coin have different export
+layouts) — see doc 32 §3.
 
 ### D-005: No actual 2026 budget workbook file was supplied
 
@@ -269,7 +277,7 @@ scale — exactly the "avoid unnecessary... complex deployment systems"
 instruction in `CLAUDE.md`'s Cost Philosophy. Not required for v1, not
 blocking any milestone, and not built.
 
-### D-015: Overriding a payer split with more than two payers
+### D-015: Overriding a payer split with more than two payers — RESOLVED
 
 `checkPayerSplitTotal`/`planPayerSplitChange` (M8) can compute the one
 companion change needed to keep a two-payer EMI split at 100% automatically.
@@ -280,6 +288,24 @@ in the reference data has more than two payers, so this has not blocked
 anything. **Decision deferred** until a real liability needs it; if raised,
 the likely answer is a "record all shares at once" form rather than a
 single-field override for that case.
+
+**Resolution (2026-09-05, `docs/32_V1_2_PRODUCT_DIRECTION.md` §2.1):** a
+real liability now needs it. The owner's home loan has **three** payers —
+himself, his father and his brother — not the two the demo data models
+(`You 35% / Family 65%`).
+
+Two changes follow:
+
+1. The 3+ payer refusal is replaced by the "record all shares together"
+   form this entry anticipated.
+2. **A payer's contribution may be a fixed rupee amount, not only a
+   proportional share.** The owner pays a fixed ₹10,000 against an EMI of
+   roughly ₹28,416; if the EMI changes (floating-rate reset, part
+   prepayment) his ₹10,000 stays ₹10,000 and the other payers absorb the
+   difference. Storing that as `shareBps` (3,519 bps today) would silently
+   inflate his share the moment the EMI moved. A liability may therefore
+   mix modes: fixed amounts are taken first, and the remainder is split
+   among the proportional payers.
 
 ### D-017: No essential-expense methodology defined (v1.1, IM-04) — RESOLVED
 
@@ -358,6 +384,28 @@ sub-decisions were needed:
    usable day-to-day as an imported one.
 
 See `docs/31_MANUAL_RECORD_MANAGEMENT.md` for what shipped.
+
+### D-019: v1.2 scope — RESOLVED, recorded separately
+
+Twenty product-direction decisions taken by the account owner on
+2026-09-05, after a full read-only scan of the live database. They are
+recorded in **`docs/32_V1_2_PRODUCT_DIRECTION.md`** rather than inlined
+here, because they define a release's scope rather than resolving a single
+open question.
+
+That document is the authority on what v1.2 is and is not. Read it before
+proposing work in any of these areas — in particular §1's *"Scope
+explicitly declined"* table, which records seven capabilities that were
+offered and deliberately turned down (bank-account modelling, salary
+structure, irregular-income modelling, insurance premiums, blanket goal
+deadlines, automatic surplus allocation). Those are settled, not missing.
+
+It also records, in §0, that `data/wealthforge.db` contained **no real
+financial data** at the time these decisions were made — only demo-seed
+fixtures and E2E residue — which is why "import real data" precedes every
+milestone in its §4 sequence.
+
+D-014 and D-015 above are closed by that same session.
 
 ## Non-decisions (explicitly out of scope, not "open")
 
