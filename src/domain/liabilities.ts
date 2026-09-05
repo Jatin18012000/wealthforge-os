@@ -178,3 +178,39 @@ export function projectEmiRelease(
     fromScheduleOnly: paymentsMade === 0,
   });
 }
+
+// --- Manual liability creation (Data Center) -------------------------------
+
+/**
+ * Whole calendar months between a start and end date, e.g. 2026-01-15 to
+ * 2027-01-15 is 12 months. Only the year/month components are compared —
+ * a tenure is a count of monthly instalments, not a day-precise duration.
+ * Clamped to a minimum of 1: an EMI schedule with zero instalments isn't
+ * meaningful.
+ */
+export function computeTenureMonthsBetween(startDate: Date, endDate: Date): number {
+  const months =
+    (endDate.getUTCFullYear() - startDate.getUTCFullYear()) * 12 +
+    (endDate.getUTCMonth() - startDate.getUTCMonth());
+  return Math.max(1, months);
+}
+
+/**
+ * Standard reducing-balance EMI formula: EMI = P × r × (1+r)^n ÷ ((1+r)^n − 1),
+ * where r is the monthly interest rate. At 0% interest this reduces to a
+ * flat P ÷ n, handled as an explicit case rather than relying on the
+ * formula's limit (division by zero at r=0).
+ */
+export function computeEmiAmount(
+  principalMinorUnits: number,
+  annualInterestRateBps: number,
+  tenureMonths: number,
+): number {
+  if (tenureMonths <= 0) return 0;
+  if (annualInterestRateBps <= 0) {
+    return roundHalfToEven(principalMinorUnits / tenureMonths);
+  }
+  const monthlyRate = bpsToRatio(annualInterestRateBps) / 12;
+  const factor = Math.pow(1 + monthlyRate, tenureMonths);
+  return roundHalfToEven((principalMinorUnits * monthlyRate * factor) / (factor - 1));
+}

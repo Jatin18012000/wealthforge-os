@@ -205,6 +205,12 @@ model Liability {
   tenureMonths           Int
   emiAmountMinorUnits    Int
   createdAt              DateTime @default(now())
+  /// Set when the user manually closes this liability (paid off outside the
+  /// app, account closed, etc.) — never cleared by any automatic process.
+  /// Null means active. Distinct from `outstandingMinorUnits` reaching
+  /// zero, which is a fact the source statement reports, not a user
+  /// decision to stop tracking it.
+  closedAt               DateTime?
 
   payerSplits LiabilityPayerSplit[]
   activities  Activity[]

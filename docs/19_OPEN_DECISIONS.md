@@ -314,6 +314,51 @@ for what shipped. Emergency Fund Runway now reports a real figure
 whenever an Emergency Fund goal and a complete month's budget data exist,
 rather than `insufficient-data` in every case.
 
+### D-018: Manual creation, closing and deletion of Goals/Liabilities/Insurance — RESOLVED
+
+Through v1.1.1, the only creation path for most Goals, Liabilities and
+Insurance policies was import (budget workbook / portfolio snapshot), with
+one narrow exception (`createEmergencyFundGoalAction`). The account owner
+asked for a general, future-proof way to register a new EMI/liability or
+goal by hand from the Data Center — e.g. a new gadget or card purchase
+bought on EMI, or a new savings goal — without waiting for a workbook
+import, plus the ability to delete a record they added by mistake. Three
+sub-decisions were needed:
+
+1. **EMI calculation for a manually-created liability.** Deriving tenure
+   from a start/end date pair is unambiguous, but deriving the EMI amount
+   from principal + tenure alone requires an interest rate — silently
+   defaulting to 0% (interest-free) would misrepresent a real loan's
+   payment. **Decision: always ask for an interest rate** (basis points,
+   `annualInterestRateBps`), even 0 for a genuinely interest-free
+   arrangement, and compute the EMI with the standard reducing-balance
+   amortization formula (`computeEmiAmount`, `src/domain/liabilities.ts`),
+   with an explicit flat-division fallback at `r = 0` to avoid that
+   formula's division-by-zero limit case.
+2. **Deletion policy.** The project's standing philosophy is to never
+   silently discard financial history (revisions, overrides and
+   supersessions are reversible-but-retained, never erased). **Decision:
+   a record with zero `Activity` history may be hard-deleted; once it has
+   any payment or contribution history, deletion is blocked and "mark
+   closed" is offered instead** — a new `closedAt: DateTime?` on
+   `Liability` (mirroring `Goal.lifecycleState` and
+   `InsurancePolicy.status`, which already had a closable/cancellable
+   state). A closed liability is excluded from `loadLiabilities` and all
+   active calculations, the same way a cancelled goal is excluded from
+   `activeGoalsByPriority`, but its row and full Activity history remain
+   intact and visible from the Data Center's unfiltered "Manage records"
+   table. Insurance policies have no `Activity` relation, so they may
+   always be hard-deleted.
+3. **Ongoing payment/contribution recording.** Emergency Fund already had
+   an uncapped manual top-up (`topUpEmergencyFundAction`), distinct from
+   the Budget screen's leftover-cash-capped goal allocation. **Decision:
+   generalize this to every goal and every liability** —
+   `topUpGoalAction` (Goals page) and `recordEmiPaymentAction`
+   (Liabilities page) — so a manually-created EMI or goal is just as
+   usable day-to-day as an imported one.
+
+See `docs/31_MANUAL_RECORD_MANAGEMENT.md` for what shipped.
+
 ## Non-decisions (explicitly out of scope, not "open")
 
 Multi-user support, automatic trade execution, mandatory brokerage

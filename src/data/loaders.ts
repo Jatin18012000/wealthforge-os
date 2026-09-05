@@ -163,8 +163,19 @@ export async function loadActivities(db: PrismaClient): Promise<ActivityInput[]>
   }));
 }
 
+/**
+ * A closed liability (`Liability.closedAt` set, via the Data Center's
+ * "close" action) is excluded here — the same way `activeGoalsByPriority`
+ * excludes a cancelled goal — so it stops counting toward EMI release
+ * projections, the debt freedom meter, and milestones, while its full
+ * payment history and the row itself remain on file, visible from the
+ * Data Center's record management table.
+ */
 export async function loadLiabilities(db: PrismaClient): Promise<LiabilityDetail[]> {
-  const rows = await db.liability.findMany({ include: { payerSplits: true } });
+  const rows = await db.liability.findMany({
+    where: { closedAt: null },
+    include: { payerSplits: true },
+  });
   const adjustments = await loadEffectiveAdjustments(db);
 
   return rows.map((row) => ({

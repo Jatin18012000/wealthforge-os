@@ -87,3 +87,41 @@ export async function topUpEmergencyFundAction(form: FormData): Promise<void> {
   revalidatePath("/");
   redirect("/goals?toppedUp=1");
 }
+
+/**
+ * A manual, uncapped top-up for any goal — the same pattern as
+ * `topUpEmergencyFundAction`, generalized once other goals gained a
+ * creation path of their own (`src/app/data-center/actions.ts`'s
+ * `createGoalAction`). Deliberately distinct from the Budget screen's
+ * "allocate leftover cash to a goal" flow, which caps a contribution at
+ * that period's actual computed leftover cash.
+ */
+export async function topUpGoalAction(form: FormData): Promise<void> {
+  const goalId = text(form, "goalId");
+  const goal = await db.goal.findUnique({ where: { id: goalId } });
+  if (goal === null) fail("That goal no longer exists.");
+  if (goal.lifecycleState === "cancelled" || goal.lifecycleState === "achieved") {
+    fail(`"${goal.name}" is ${goal.lifecycleState} and does not accept new contributions.`);
+  }
+
+  const parsedAmount = parseRupees(text(form, "amount"));
+  if (parsedAmount.kind !== "ok") fail(parsedAmount.reasons.join("; "));
+  const amountMinorUnits = (parsedAmount as { kind: "ok"; value: number }).value;
+
+  const check = validateEmergencyFundTopUp(amountMinorUnits);
+  if (!check.allowed) fail(check.reason ?? "That top-up is not allowed.");
+
+  await db.activity.create({
+    data: {
+      kind: "goal_contribution",
+      goalId: goal.id,
+      amountMinorUnits,
+      occurredOn: new Date(),
+      trustState: "verified",
+    },
+  });
+
+  revalidatePath("/goals");
+  revalidatePath("/");
+  redirect("/goals?toppedUp=1");
+}

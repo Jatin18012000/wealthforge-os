@@ -2,9 +2,18 @@ import { Card, EmptyState } from "../../components/Primitives";
 import { ensureAutomaticBackup } from "../../backup";
 import { BACKUP_DIR } from "../../data/dataCenterStore";
 import { db } from "../../lib/db";
-import { formatDate } from "../../presentation/format";
+import { formatDate, formatMoney } from "../../presentation/format";
 import { getDataCenterView } from "../../views/dataCenterView";
 import {
+  closeGoalAction,
+  closeInsurancePolicyAction,
+  closeLiabilityAction,
+  createGoalAction,
+  createInsurancePolicyAction,
+  createLiabilityAction,
+  deleteGoalAction,
+  deleteInsurancePolicyAction,
+  deleteLiabilityAction,
   exportBackupAction,
   restoreBackupAction,
   uploadBudgetWorkbookAction,
@@ -40,6 +49,33 @@ const DEFAULT_ASSET_CLASSES = [
   { value: "epf", label: "EPF" },
 ] as const;
 
+const GOAL_KIND_OPTIONS = [
+  { value: "emergency_fund", label: "Emergency fund" },
+  { value: "car", label: "Car" },
+  { value: "marriage", label: "Marriage" },
+  { value: "third_floor", label: "Third floor" },
+  { value: "custom", label: "Custom" },
+] as const;
+
+const LIABILITY_KIND_OPTIONS = [
+  { value: "home_loan", label: "Home loan" },
+  { value: "other", label: "Other (card, gadget, personal loan, ...)" },
+] as const;
+
+const INSURANCE_KIND_OPTIONS = [
+  { value: "health_personal", label: "Health — personal" },
+  { value: "health_family", label: "Health — family" },
+  { value: "term", label: "Term" },
+  { value: "other", label: "Other" },
+] as const;
+
+const PREMIUM_FREQUENCY_OPTIONS = [
+  { value: "", label: "Not yet known" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "annual", label: "Annual" },
+] as const;
+
 export default async function DataCenterPage({
   searchParams,
 }: {
@@ -58,6 +94,12 @@ export default async function DataCenterPage({
   const view = await getDataCenterView(db, {
     ...(one("event") === "" ? {} : { highlightEventId: one("event") }),
   });
+
+  const [goals, liabilities, insurancePolicies] = await Promise.all([
+    db.goal.findMany({ orderBy: { priorityRank: "asc" } }),
+    db.liability.findMany({ orderBy: { createdAt: "asc" } }),
+    db.insurancePolicy.findMany({ orderBy: { createdAt: "asc" } }),
+  ]);
 
   const error = one("error");
   const conflictBackup = one("conflictBackup");
@@ -105,6 +147,23 @@ export default async function DataCenterPage({
           <p className="alert">
             <span className="alert__title">Restore complete.</span> A safety backup of the
             state before this restore was taken at {one("safetyBackup")}.
+          </p>
+        )}
+        {one("recordCreated") !== "" && (
+          <p className="alert">
+            <span className="alert__title">Created.</span> {one("recordCreated")}
+          </p>
+        )}
+        {one("recordClosed") !== "" && (
+          <p className="alert">
+            <span className="alert__title">Closed.</span> &quot;{one("recordClosed")}&quot;
+            is kept on the record but no longer counted as active.
+          </p>
+        )}
+        {one("recordDeleted") !== "" && (
+          <p className="alert">
+            <span className="alert__title">Deleted.</span> &quot;{one("recordDeleted")}&quot;
+            had no recorded history, so it was removed outright.
           </p>
         )}
         {conflictBackup !== "" && (
@@ -202,6 +261,349 @@ export default async function DataCenterPage({
               Upload and import
             </button>
           </form>
+        </Card>
+
+        <Card title="Register a new goal">
+          <p className="note" style={{ marginBottom: "0.6rem" }}>
+            Once registered, its balance is tracked the same way every goal&apos;s is — as
+            a running sum of contributions, never a separately-stored total. Top it up from
+            the Goals screen.
+          </p>
+          <form action={createGoalAction} className="entry-form">
+            <label className="field">
+              <span className="field__label">Name</span>
+              <input
+                className="field__input"
+                type="text"
+                name="name"
+                placeholder="e.g. Vacation fund"
+                required
+                aria-label="Goal name"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">Type</span>
+              <select className="field__select" name="kind" defaultValue="custom">
+                {GOAL_KIND_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field__label">Target amount (₹)</span>
+              <input
+                className="field__input"
+                type="text"
+                name="targetAmount"
+                inputMode="decimal"
+                placeholder="e.g. 200000"
+                required
+                aria-label="Goal target amount"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">Target date (optional)</span>
+              <input className="field__input" type="date" name="targetDate" aria-label="Goal target date" />
+            </label>
+            <button type="submit" className="button button--primary">
+              Register goal
+            </button>
+          </form>
+        </Card>
+
+        <Card title="Register a new EMI / liability">
+          <p className="note" style={{ marginBottom: "0.6rem" }}>
+            Give the total price and what you paid upfront — the system finances the rest:
+            principal = price − upfront, and the monthly EMI is calculated from the
+            principal, the interest rate, and the number of months between the start and
+            end date (0% interest is a valid, flat EMI).
+          </p>
+          <form action={createLiabilityAction} className="entry-form">
+            <label className="field">
+              <span className="field__label">Name</span>
+              <input
+                className="field__input"
+                type="text"
+                name="name"
+                placeholder="e.g. New phone EMI"
+                required
+                aria-label="Liability name"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">Type</span>
+              <select className="field__select" name="kind" defaultValue="other">
+                {LIABILITY_KIND_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field__label">Total price (₹)</span>
+              <input
+                className="field__input"
+                type="text"
+                name="totalPrice"
+                inputMode="decimal"
+                placeholder="e.g. 60000"
+                required
+                aria-label="Total price"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">Amount paid upfront (₹)</span>
+              <input
+                className="field__input"
+                type="text"
+                name="amountPaidUpfront"
+                inputMode="decimal"
+                placeholder="e.g. 0"
+                aria-label="Amount paid upfront"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">Start date</span>
+              <input className="field__input" type="date" name="startDate" required aria-label="EMI start date" />
+            </label>
+            <label className="field">
+              <span className="field__label">End date</span>
+              <input className="field__input" type="date" name="endDate" required aria-label="EMI end date" />
+            </label>
+            <label className="field">
+              <span className="field__label">Annual interest rate (%)</span>
+              <input
+                className="field__input"
+                type="text"
+                name="annualInterestRate"
+                inputMode="decimal"
+                placeholder="e.g. 0 for a no-cost EMI"
+                aria-label="Annual interest rate percent"
+              />
+            </label>
+            <button type="submit" className="button button--primary">
+              Register liability
+            </button>
+          </form>
+        </Card>
+
+        <Card title="Register a new insurance policy">
+          <form action={createInsurancePolicyAction} className="entry-form">
+            <label className="field">
+              <span className="field__label">Type</span>
+              <select className="field__select" name="kind" defaultValue="other">
+                {INSURANCE_KIND_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field__label">Insured party</span>
+              <input
+                className="field__input"
+                type="text"
+                name="insuredParty"
+                placeholder="e.g. Self, Family"
+                required
+                aria-label="Insured party"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">Provider</span>
+              <input
+                className="field__input"
+                type="text"
+                name="provider"
+                placeholder="e.g. HDFC Life"
+                required
+                aria-label="Insurance provider"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">Cover amount (₹, optional)</span>
+              <input
+                className="field__input"
+                type="text"
+                name="coverAmount"
+                inputMode="decimal"
+                aria-label="Cover amount"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">Premium (₹, optional)</span>
+              <input className="field__input" type="text" name="premium" inputMode="decimal" aria-label="Premium" />
+            </label>
+            <label className="field">
+              <span className="field__label">Premium frequency</span>
+              <select className="field__select" name="premiumFrequency" defaultValue="">
+                {PREMIUM_FREQUENCY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field__label">Effective from (optional)</span>
+              <input
+                className="field__input"
+                type="date"
+                name="effectiveFrom"
+                aria-label="Policy effective from"
+              />
+            </label>
+            <button type="submit" className="button button--primary">
+              Register policy
+            </button>
+          </form>
+        </Card>
+
+        <Card title="Manage records">
+          <p className="note" style={{ marginBottom: "0.6rem" }}>
+            Closing keeps a record and its full history on file, just no longer counted as
+            active. Deleting is only available while a record has no recorded
+            payment/contribution history — once it does, close it instead.
+          </p>
+
+          <h3 className="card__title">Goals</h3>
+          {goals.length === 0 ? (
+            <EmptyState>No goals registered.</EmptyState>
+          ) : (
+            <div className="table-scroll" style={{ marginBottom: "1rem" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Manage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {goals.map((goal) => (
+                    <tr key={goal.id}>
+                      <td>{goal.name}</td>
+                      <td>{goal.lifecycleState.replace(/_/g, " ")}</td>
+                      <td>
+                        {goal.lifecycleState !== "cancelled" && (
+                          <form action={closeGoalAction} style={{ display: "inline-block", marginRight: "0.4rem" }}>
+                            <input type="hidden" name="goalId" value={goal.id} />
+                            <button type="submit" className="button button--quiet">
+                              Close
+                            </button>
+                          </form>
+                        )}
+                        <form action={deleteGoalAction} style={{ display: "inline-block" }}>
+                          <input type="hidden" name="goalId" value={goal.id} />
+                          <button type="submit" className="button button--quiet">
+                            Delete
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h3 className="card__title">Liabilities / EMIs</h3>
+          {liabilities.length === 0 ? (
+            <EmptyState>No liabilities registered.</EmptyState>
+          ) : (
+            <div className="table-scroll" style={{ marginBottom: "1rem" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col" className="num">
+                      EMI
+                    </th>
+                    <th scope="col">State</th>
+                    <th scope="col">Manage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {liabilities.map((liability) => (
+                    <tr key={liability.id}>
+                      <td>{liability.name}</td>
+                      <td className="num">{formatMoney(liability.emiAmountMinorUnits)}/mo</td>
+                      <td>{liability.closedAt === null ? "active" : `closed ${formatDate(liability.closedAt)}`}</td>
+                      <td>
+                        {liability.closedAt === null && (
+                          <form
+                            action={closeLiabilityAction}
+                            style={{ display: "inline-block", marginRight: "0.4rem" }}
+                          >
+                            <input type="hidden" name="liabilityId" value={liability.id} />
+                            <button type="submit" className="button button--quiet">
+                              Close
+                            </button>
+                          </form>
+                        )}
+                        <form action={deleteLiabilityAction} style={{ display: "inline-block" }}>
+                          <input type="hidden" name="liabilityId" value={liability.id} />
+                          <button type="submit" className="button button--quiet">
+                            Delete
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h3 className="card__title">Insurance policies</h3>
+          {insurancePolicies.length === 0 ? (
+            <EmptyState>No insurance policies registered.</EmptyState>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Provider</th>
+                    <th scope="col">Insured</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Manage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {insurancePolicies.map((policy) => (
+                    <tr key={policy.id}>
+                      <td>{policy.provider}</td>
+                      <td>{policy.insuredParty}</td>
+                      <td>{policy.status}</td>
+                      <td>
+                        {policy.status !== "cancelled" && (
+                          <form
+                            action={closeInsurancePolicyAction}
+                            style={{ display: "inline-block", marginRight: "0.4rem" }}
+                          >
+                            <input type="hidden" name="policyId" value={policy.id} />
+                            <button type="submit" className="button button--quiet">
+                              Close
+                            </button>
+                          </form>
+                        )}
+                        <form action={deleteInsurancePolicyAction} style={{ display: "inline-block" }}>
+                          <input type="hidden" name="policyId" value={policy.id} />
+                          <button type="submit" className="button button--quiet">
+                            Delete
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
 
         <Card title="Backup & restore">

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeEmiAmount,
+  computeTenureMonthsBetween,
   emiBurdenForPayer,
   expectOk,
   projectEmiRelease,
@@ -148,5 +150,53 @@ describe("EMI release projection", () => {
     expect(projectEmiRelease(homeLoan({ tenureMonths: 0 }), [], AS_OF).kind).toBe(
       "insufficient-data",
     );
+  });
+});
+
+describe("computeTenureMonthsBetween", () => {
+  it("counts whole calendar months between two dates", () => {
+    expect(
+      computeTenureMonthsBetween(new Date("2026-01-15T00:00:00Z"), new Date("2027-01-15T00:00:00Z")),
+    ).toBe(12);
+  });
+
+  it("ignores the day-of-month component", () => {
+    expect(
+      computeTenureMonthsBetween(new Date("2026-01-01T00:00:00Z"), new Date("2026-07-28T00:00:00Z")),
+    ).toBe(6);
+  });
+
+  it("clamps to a minimum of 1 month, never zero or negative", () => {
+    expect(
+      computeTenureMonthsBetween(new Date("2026-01-15T00:00:00Z"), new Date("2026-01-20T00:00:00Z")),
+    ).toBe(1);
+    expect(
+      computeTenureMonthsBetween(new Date("2026-06-15T00:00:00Z"), new Date("2026-01-15T00:00:00Z")),
+    ).toBe(1);
+  });
+});
+
+describe("computeEmiAmount", () => {
+  it("splits an interest-free principal flat across the tenure", () => {
+    expect(computeEmiAmount(60_00, 0, 60)).toBe(1_00); // ₹60 over 60 months, no interest → ₹1/month
+  });
+
+  it("computes a standard reducing-balance EMI at a real interest rate", () => {
+    // ₹1,00,00,000 at 8.5% for 240 months — a textbook home-loan EMI check.
+    const emi = computeEmiAmount(1_00_00_000 * 100, 850, 240);
+    expect(emi).toBeGreaterThan(0);
+    // Total repayment must exceed principal once interest is charged.
+    expect(emi * 240).toBeGreaterThan(1_00_00_000 * 100);
+  });
+
+  it("returns zero for a non-positive tenure rather than dividing by zero", () => {
+    expect(computeEmiAmount(1_00_000, 0, 0)).toBe(0);
+    expect(computeEmiAmount(1_00_000, 850, -1)).toBe(0);
+  });
+
+  it("a higher interest rate never produces a lower EMI for the same principal and tenure", () => {
+    const low = computeEmiAmount(1_00_000, 500, 12);
+    const high = computeEmiAmount(1_00_000, 1500, 12);
+    expect(high).toBeGreaterThan(low);
   });
 });

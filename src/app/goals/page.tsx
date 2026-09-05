@@ -4,7 +4,7 @@ import { formatDate, formatMoney, formatRatio } from "../../presentation/format"
 import { resolveAsOf, resolveLatestPeriod } from "../../views/context";
 import { getGoalLiabilityIntelligenceView } from "../../views/goalLiabilityIntelligenceView";
 import { getGoalsView, type GoalCard } from "../../views/goalsView";
-import { createEmergencyFundGoalAction, topUpEmergencyFundAction } from "./actions";
+import { createEmergencyFundGoalAction, topUpEmergencyFundAction, topUpGoalAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ const LIFECYCLE_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-function GoalPanel({ card }: { card: GoalCard }) {
+function GoalPanel({ card, canTopUp }: { card: GoalCard; canTopUp: boolean }) {
   const { goal, progress, projection, effectiveBalance } = card;
 
   return (
@@ -129,6 +129,27 @@ function GoalPanel({ card }: { card: GoalCard }) {
         <p className="alert alert--caution" style={{ marginTop: "0.6rem" }}>
           {progress.anomaly}
         </p>
+      )}
+
+      {canTopUp && (
+        <form action={topUpGoalAction} className="entry-form" style={{ marginTop: "0.7rem" }}>
+          <input type="hidden" name="goalId" value={goal.id} />
+          <label className="field">
+            <span className="field__label">Add a contribution (₹)</span>
+            <input
+              className="field__input"
+              type="text"
+              name="amount"
+              inputMode="decimal"
+              placeholder="e.g. 2000"
+              required
+              aria-label={`Contribution amount for ${goal.name}`}
+            />
+          </label>
+          <button type="submit" className="button button--quiet">
+            Add
+          </button>
+        </form>
       )}
     </Card>
   );
@@ -300,7 +321,7 @@ export default async function GoalsPage({
         ) : (
           <div className="grid grid--halves">
             {view.active.map((card) => (
-              <GoalPanel key={card.goal.id} card={card} />
+              <GoalPanel key={card.goal.id} card={card} canTopUp />
             ))}
           </div>
         )}
@@ -316,7 +337,7 @@ export default async function GoalsPage({
             </p>
             <div className="grid grid--halves">
               {view.inactive.map((card) => (
-                <GoalPanel key={card.goal.id} card={card} />
+                <GoalPanel key={card.goal.id} card={card} canTopUp={false} />
               ))}
             </div>
           </>

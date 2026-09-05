@@ -5,10 +5,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { backupAfterImport, exportFullBackup, restoreFullBackup } from "../../backup";
 import { BACKUP_DIR, SAFETY_BACKUP_DIR } from "../../data/dataCenterStore";
+import { computeEmiAmount, computeTenureMonthsBetween } from "../../domain";
 import { hashBuffer, importBudgetWorkbook, storeUpload } from "../../ingestion";
 import { importPortfolioSnapshot } from "../../ingestion/portfolio";
 import type { PortfolioAssetClass } from "../../ingestion/portfolio/types";
 import { db } from "../../lib/db";
+import { parsePercentAsBps, parseRupees } from "../../presentation/parse";
 
 /**
  * Data Center writes: upload → real ingestion pipeline → automatic backup,
@@ -181,4 +183,264 @@ export async function restoreBackupAction(form: FormData): Promise<void> {
 
   revalidatePath("/", "layout");
   redirect(dataCenterUrl({ restored: "1", safetyBackup: result.safetyBackupPath }));
+}
+
+// --- Manual record creation & management ------------------------------------
+//
+// Goals, Liabilities, and Insurance Policies previously had no creation path
+// at all outside the initial seed. These forms register a new one of each,
+// the same way an import registers a new source document — recorded here,
+// then visible on its own screen. A close/delete pair exists for each:
+// close (mark inactive) is always available; delete is a hard removal
+// permitted only when the record has no payment/contribution history yet,
+// so real financial history is never silently discarded.
+
+const GOAL_KINDS = ["emergency_fund", "car", "marriage", "third_floor", "custom"] as const;
+const LIABILITY_KINDS = ["home_loan", "other"] as const;
+const INSURANCE_KINDS = ["health_personal", "health_family", "term", "other"] as const;
+const PREMIUM_FREQUENCIES = ["monthly", "quarterly", "annual"] as const;
+
+function fail(message: string): never {
+  redirect(dataCenterUrl({ error: message }));
+}
+
+function parseOptionalDate(raw: string): Date | null {
+  if (raw.trim() === "") return null;
+  const date = new Date(`${raw}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function requiredMinorUnits(raw: string, label: string): number {
+  const parsed = parseRupees(raw);
+  if (parsed.kind !== "ok") fail(`${label}: ${parsed.reasons.join("; ")}`);
+  return (parsed as { kind: "ok"; value: number }).value;
+}
+
+function optionalMinorUnits(raw: string, label: string): number | null {
+  if (raw.trim() === "") return null;
+  return requiredMinorUnits(raw, label);
+}
+
+export async function createGoalAction(form: FormData): Promise<void> {
+  const name = text(form, "name").trim();
+  if (name === "") fail("Give the goal a name.");
+
+  const kind = text(form, "kind");
+  if (!(GOAL_KINDS as readonly string[]).includes(kind)) {
+    fail(`"${kind}" is not a recognized goal type.`);
+  }
+  if (kind === "emergency_fund") {
+    const existing = await db.goal.findFirst({ where: { kind: "emergency_fund" } });
+    if (existing !== null) {
+      fail("An Emergency Fund goal already exists — top it up from the Goals screen instead of creating another.");
+    }
+  }
+
+  const targetAmountMinorUnits = requiredMinorUnits(text(form, "targetAmount"), "Target amount");
+  if (targetAmountMinorUnits <= 0) fail("Target amount must be greater than zero.");
+
+  const targetDate = parseOptionalDate(text(form, "targetDate"));
+
+  const maxPriority = await db.goal.aggregate({ _max: { priorityRank: true } });
+  const priorityRank = (maxPriority._max.priorityRank ?? 0) + 1;
+
+  await db.goal.create({
+    data: {
+      name,
+      kind,
+      targetAmountMinorUnits,
+      priorityRank,
+      lifecycleState: "planned",
+      ...(targetDate === null ? {} : { targetDate }),
+    },
+  });
+
+  revalidatePath("/goals");
+  revalidatePath("/");
+  redirect(dataCenterUrl({ recordCreated: `Goal "${name}"` }));
+}
+
+export async function closeGoalAction(form: FormData): Promise<void> {
+  const goalId = text(form, "goalId");
+  const goal = await db.goal.findUnique({ where: { id: goalId } });
+  if (goal === null) fail("That goal no longer exists.");
+
+  await db.goal.update({ where: { id: goalId }, data: { lifecycleState: "cancelled" } });
+  revalidatePath("/goals");
+  revalidatePath("/");
+  redirect(dataCenterUrl({ recordClosed: goal.name }));
+}
+
+export async function deleteGoalAction(form: FormData): Promise<void> {
+  const goalId = text(form, "goalId");
+  const goal = await db.goal.findUnique({ where: { id: goalId } });
+  if (goal === null) fail("That goal no longer exists.");
+
+  const activityCount = await db.activity.count({ where: { goalId } });
+  if (activityCount > 0) {
+    fail(
+      `"${goal.name}" has ${activityCount} recorded contribution(s)/withdrawal(s) — close it instead of deleting, so the history is kept.`,
+    );
+  }
+
+  await db.goal.delete({ where: { id: goalId } });
+  revalidatePath("/goals");
+  revalidatePath("/");
+  redirect(dataCenterUrl({ recordDeleted: goal.name }));
+}
+
+export async function createLiabilityAction(form: FormData): Promise<void> {
+  const name = text(form, "name").trim();
+  if (name === "") fail("Give the liability a name.");
+
+  const kind = text(form, "kind");
+  if (!(LIABILITY_KINDS as readonly string[]).includes(kind)) {
+    fail(`"${kind}" is not a recognized liability type.`);
+  }
+
+  const totalPriceMinorUnits = requiredMinorUnits(text(form, "totalPrice"), "Total price");
+  if (totalPriceMinorUnits <= 0) fail("Total price must be greater than zero.");
+
+  const amountPaidUpfrontMinorUnits = optionalMinorUnits(text(form, "amountPaidUpfront"), "Amount paid upfront") ?? 0;
+  if (amountPaidUpfrontMinorUnits < 0) fail("Amount paid upfront cannot be negative.");
+  if (amountPaidUpfrontMinorUnits >= totalPriceMinorUnits) {
+    fail("Amount paid upfront must be less than the total price — otherwise there is nothing to finance as an EMI.");
+  }
+
+  const startDate = parseOptionalDate(text(form, "startDate"));
+  const endDate = parseOptionalDate(text(form, "endDate"));
+  if (startDate === null || endDate === null) fail("Both a start date and an end date are required.");
+  if (endDate.getTime() <= startDate.getTime()) fail("The end date must be after the start date.");
+
+  const interestRateRaw = text(form, "annualInterestRate");
+  let interestRateBps = 0;
+  if (interestRateRaw.trim() !== "") {
+    const parsedRate = parsePercentAsBps(interestRateRaw);
+    if (parsedRate.kind !== "ok") fail(`Interest rate: ${parsedRate.reasons.join("; ")}`);
+    interestRateBps = (parsedRate as { kind: "ok"; value: number }).value;
+  }
+  if (interestRateBps < 0) fail("Interest rate cannot be negative.");
+
+  const principalMinorUnits = totalPriceMinorUnits - amountPaidUpfrontMinorUnits;
+  const tenureMonths = computeTenureMonthsBetween(startDate, endDate);
+  const emiAmountMinorUnits = computeEmiAmount(principalMinorUnits, interestRateBps, tenureMonths);
+
+  await db.liability.create({
+    data: {
+      name,
+      kind,
+      principalMinorUnits,
+      outstandingMinorUnits: principalMinorUnits,
+      outstandingAsOf: startDate,
+      interestRateBps,
+      tenureMonths,
+      emiAmountMinorUnits,
+    },
+  });
+
+  revalidatePath("/liabilities");
+  revalidatePath("/");
+  redirect(
+    dataCenterUrl({
+      recordCreated: `Liability "${name}" — ${(emiAmountMinorUnits / 100).toFixed(2)}/month for ${tenureMonths} months`,
+    }),
+  );
+}
+
+export async function closeLiabilityAction(form: FormData): Promise<void> {
+  const liabilityId = text(form, "liabilityId");
+  const liability = await db.liability.findUnique({ where: { id: liabilityId } });
+  if (liability === null) fail("That liability no longer exists.");
+
+  await db.liability.update({ where: { id: liabilityId }, data: { closedAt: new Date() } });
+  revalidatePath("/liabilities");
+  revalidatePath("/");
+  redirect(dataCenterUrl({ recordClosed: liability.name }));
+}
+
+export async function deleteLiabilityAction(form: FormData): Promise<void> {
+  const liabilityId = text(form, "liabilityId");
+  const liability = await db.liability.findUnique({ where: { id: liabilityId } });
+  if (liability === null) fail("That liability no longer exists.");
+
+  const activityCount = await db.activity.count({ where: { liabilityId } });
+  if (activityCount > 0) {
+    fail(
+      `"${liability.name}" has ${activityCount} recorded payment(s) — close it instead of deleting, so the history is kept.`,
+    );
+  }
+
+  // Payer splits carry no financial history of their own — cascade-deleted
+  // with the liability (schema: onDelete: Cascade).
+  await db.liability.delete({ where: { id: liabilityId } });
+  revalidatePath("/liabilities");
+  revalidatePath("/");
+  redirect(dataCenterUrl({ recordDeleted: liability.name }));
+}
+
+export async function createInsurancePolicyAction(form: FormData): Promise<void> {
+  const kind = text(form, "kind");
+  if (!(INSURANCE_KINDS as readonly string[]).includes(kind)) {
+    fail(`"${kind}" is not a recognized insurance type.`);
+  }
+
+  const insuredParty = text(form, "insuredParty").trim();
+  if (insuredParty === "") fail("Name who this policy insures.");
+  const provider = text(form, "provider").trim();
+  if (provider === "") fail("Name the insurance provider.");
+
+  const coverAmountMinorUnits = optionalMinorUnits(text(form, "coverAmount"), "Cover amount");
+  const premiumMinorUnits = optionalMinorUnits(text(form, "premium"), "Premium");
+
+  const premiumFrequencyRaw = text(form, "premiumFrequency");
+  let premiumFrequency: string | null = null;
+  if (premiumFrequencyRaw !== "") {
+    if (!(PREMIUM_FREQUENCIES as readonly string[]).includes(premiumFrequencyRaw)) {
+      fail(`"${premiumFrequencyRaw}" is not a recognized premium frequency.`);
+    }
+    premiumFrequency = premiumFrequencyRaw;
+  }
+
+  const effectiveFrom = parseOptionalDate(text(form, "effectiveFrom"));
+
+  await db.insurancePolicy.create({
+    data: {
+      kind,
+      insuredParty,
+      provider,
+      coverAmountMinorUnits,
+      premiumMinorUnits,
+      premiumFrequency,
+      status: "planned",
+      ...(effectiveFrom === null ? {} : { effectiveFrom }),
+    },
+  });
+
+  revalidatePath("/insurance");
+  revalidatePath("/");
+  redirect(dataCenterUrl({ recordCreated: `Insurance policy for ${insuredParty}` }));
+}
+
+export async function closeInsurancePolicyAction(form: FormData): Promise<void> {
+  const policyId = text(form, "policyId");
+  const policy = await db.insurancePolicy.findUnique({ where: { id: policyId } });
+  if (policy === null) fail("That policy no longer exists.");
+
+  await db.insurancePolicy.update({ where: { id: policyId }, data: { status: "cancelled" } });
+  revalidatePath("/insurance");
+  revalidatePath("/");
+  redirect(dataCenterUrl({ recordClosed: `${policy.provider} policy` }));
+}
+
+export async function deleteInsurancePolicyAction(form: FormData): Promise<void> {
+  const policyId = text(form, "policyId");
+  const policy = await db.insurancePolicy.findUnique({ where: { id: policyId } });
+  if (policy === null) fail("That policy no longer exists.");
+
+  // Insurance policies carry no linked Activity ledger in this schema —
+  // there is no payment history a delete could silently discard.
+  await db.insurancePolicy.delete({ where: { id: policyId } });
+  revalidatePath("/insurance");
+  revalidatePath("/");
+  redirect(dataCenterUrl({ recordDeleted: `${policy.provider} policy` }));
 }

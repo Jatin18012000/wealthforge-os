@@ -3,12 +3,24 @@ import { db } from "../../lib/db";
 import { formatDate, formatMoney, formatRatio } from "../../presentation/format";
 import { resolveAsOf } from "../../views/context";
 import { getLiabilitiesView } from "../../views/liabilitiesView";
+import { recordEmiPaymentAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function LiabilitiesPage() {
+export default async function LiabilitiesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const one = (key: string): string => {
+    const value = params[key];
+    return typeof value === "string" ? value : "";
+  };
+
   const asOf = await resolveAsOf(db);
   const view = await getLiabilitiesView(db, asOf);
+  const error = one("error");
 
   return (
     <>
@@ -18,6 +30,18 @@ export default async function LiabilitiesPage() {
       </div>
 
       <div className="stack">
+        {error !== "" && (
+          <p className="alert alert--caution">
+            <span className="alert__title">Nothing was changed.</span> {error}
+          </p>
+        )}
+        {one("paymentRecorded") !== "" && (
+          <p className="alert">
+            <span className="alert__title">Payment recorded.</span> Every screen now
+            reflects it.
+          </p>
+        )}
+
         <div className="grid grid--tiles">
           <StatTile
             label="Total outstanding"
@@ -127,9 +151,37 @@ export default async function LiabilitiesPage() {
                   </Computed$>
                 </div>
               </div>
+
+              <form
+                action={recordEmiPaymentAction}
+                className="entry-form"
+                style={{ marginTop: "0.7rem" }}
+              >
+                <input type="hidden" name="liabilityId" value={card.liability.id} />
+                <label className="field">
+                  <span className="field__label">Record a payment (₹)</span>
+                  <input
+                    className="field__input"
+                    type="text"
+                    name="amount"
+                    inputMode="decimal"
+                    placeholder="e.g. 15000"
+                    required
+                    aria-label={`EMI payment amount for ${card.liability.name}`}
+                  />
+                </label>
+                <button type="submit" className="button button--quiet">
+                  Add
+                </button>
+              </form>
             </Card>
           ))
         )}
+
+        <p className="note">
+          To register a new liability, or to close one that has been fully paid off or
+          cancelled, use the Data Center.
+        </p>
       </div>
     </>
   );

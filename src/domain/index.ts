@@ -67,6 +67,8 @@ export {
   splitEmiByPayer,
   emiBurdenForPayer,
   projectEmiRelease,
+  computeTenureMonthsBetween,
+  computeEmiAmount,
   type LiabilityDetail,
   type PayerSplitInput,
   type PayerShare,
