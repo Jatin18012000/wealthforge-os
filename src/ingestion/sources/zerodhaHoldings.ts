@@ -246,6 +246,9 @@ export function extractZerodhaSheet(
         averagePriceRupees !== null && quantity !== null
           ? roundHalfToEven(averagePriceRupees * quantity * 100)
           : null,
+      // Zerodha reports a per-unit closing price, not a holding total, so
+      // valuation goes through the usual price x quantity path.
+      marketValueMinorUnits: null,
       trustState,
       validationIssues,
       rowNumber: row,

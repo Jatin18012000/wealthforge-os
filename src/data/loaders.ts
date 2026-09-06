@@ -277,17 +277,34 @@ export async function loadPositionsAsOf(
   }
   const adjustments = await loadEffectiveAdjustments(db, "position_snapshot");
 
-  return [...latestByInstrument.values()].map((row) => ({
-    id: row.id,
-    instrumentId: row.instrumentId,
-    instrumentLabel: row.instrument.displayName,
-    assetClass: row.instrument.kind,
-    quantity:
-      adjusted(adjustments, "position_snapshot", row.id, "quantity", row.quantity) ??
+  return [...latestByInstrument.values()].map((row) => {
+    const adjustedQuantity = adjusted(
+      adjustments,
+      "position_snapshot",
+      row.id,
+      "quantity",
       row.quantity,
-    asOfDate: row.asOfDate,
-    trustState: row.trustState,
-  }));
+    );
+
+    // A stated total describes the units the SOURCE reported. Once the owner
+    // has corrected that unit count by hand, the source's total no longer
+    // describes the holding as it now stands — so it is dropped, and the
+    // holding falls back to price × the corrected quantity rather than
+    // reporting a value for units no longer claimed to be held.
+    const quantityWasCorrected =
+      adjustedQuantity !== null && Math.abs(adjustedQuantity - row.quantity) > 1e-9;
+
+    return {
+      id: row.id,
+      instrumentId: row.instrumentId,
+      instrumentLabel: row.instrument.displayName,
+      assetClass: row.instrument.kind,
+      quantity: adjustedQuantity ?? row.quantity,
+      asOfDate: row.asOfDate,
+      trustState: row.trustState,
+      marketValueMinorUnits: quantityWasCorrected ? null : row.marketValueMinorUnits,
+    };
+  });
 }
 
 /**

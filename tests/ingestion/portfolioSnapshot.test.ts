@@ -684,6 +684,35 @@ describe("mutual-fund statements that report value rather than NAV", () => {
     expect(await db.sourceDocument.count()).toBe(1);
   });
 
+  it("reconciles exactly against the statement's own stated values", async () => {
+    await importPortfolioSnapshot(db, multiFolio(), MF);
+
+    // The four priced holdings state 1,200 + 6,000 + 12,400 + 16,000. Those
+    // totals are used verbatim, so the portfolio reconciles to the paise
+    // against the statement rather than drifting by the rounding in a
+    // per-unit price. The 1,000-unit holding is where reconstruction would
+    // drift most: 12,400.00 / 1000 = 12.40 exactly here, but a statement
+    // whose value does not divide evenly would not survive the round trip.
+    const valued = expectOk(
+      valuePortfolio(
+        await loadPositionsAsOf(db, SEP_7),
+        await loadValuations(db, SEP_7),
+        SEP_7,
+      ),
+    );
+    expect(valued.totalMinorUnits).toBe(35_600 * 100);
+
+    // The stated total is persisted, not just used in passing.
+    const kotak = await db.instrument.findFirstOrThrow({
+      where: { displayName: "Kotak Mid Cap Fund" },
+    });
+    const position = await db.positionSnapshot.findFirstOrThrow({
+      where: { instrumentId: kotak.id },
+    });
+    expect(position.marketValueMinorUnits).toBe(16_000 * 100);
+    expect(position.costBasisMinorUnits).toBe(15_000 * 100);
+  });
+
   it("still refuses a layout that states neither a date nor an asset class", async () => {
     // The guard is unchanged: this file states its own date, so withholding
     // the asset class alone must still be refused.

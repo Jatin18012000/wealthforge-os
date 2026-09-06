@@ -132,6 +132,19 @@ model PositionSnapshot {
   /// cost from a later price (docs/07_FINANCIAL_CALCULATIONS.md, "P&L").
   costBasisMinorUnits Int?
 
+  /// What the SOURCE states this holding was worth at `asOfDate`, when it
+  /// states it outright. A fund-house mutual-fund statement reports a
+  /// Current Value per holding rather than a per-unit NAV, and that figure
+  /// is the statement's own fact — so it is stored verbatim and used as the
+  /// valuation directly, rather than reconstructed as price × quantity from
+  /// a per-unit price that had to be rounded to whole paise first. That
+  /// rounding drifts by a fraction of a paise per unit, which on a holding
+  /// of a thousand units is rupees, and across a portfolio does not
+  /// reconcile against the statement the owner is reading.
+  /// Null for sources that report only a price; those are valued the usual
+  /// way. See `valuePosition` in src/domain/portfolio.ts.
+  marketValueMinorUnits Int?
+
   sourceDocumentId String?
   sourceDocument   SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
   trustState       String   @default("extracted")

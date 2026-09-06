@@ -199,6 +199,7 @@ export function extractSnapshot(
       quantity,
       priceMinorUnits,
       costBasisMinorUnits,
+      marketValueMinorUnits: totalValueMinorUnits,
       trustState,
       validationIssues,
       rowNumber: row.rowNumber,

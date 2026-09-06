@@ -209,3 +209,69 @@ describe("net worth", () => {
     expect(result.kind).toBe("insufficient-data");
   });
 });
+
+describe("valuing from a source-stated total", () => {
+  const SEP_7 = new Date("2026-09-07T00:00:00Z");
+  const base = {
+    id: "p1",
+    instrumentId: "i1",
+    instrumentLabel: "Some Fund",
+    assetClass: "mutual_fund",
+    asOfDate: SEP_7,
+    trustState: "validated",
+  };
+
+  it("uses the stated total verbatim rather than reconstructing price x quantity", () => {
+    // 12,404.47 over 1045.133 units implies 11.87 per unit, and 11.87 x
+    // 1045.133 rounds back to 12,405.73 — Rs 1.26 adrift. The stated total
+    // is the source's own figure, so it is used as-is.
+    const valued = expectOk(
+      valuePosition(
+        { ...base, quantity: 1045.133, marketValueMinorUnits: 1_240_447 },
+        [{ instrumentId: "i1", asOfDate: SEP_7, priceMinorUnits: 1_187 }],
+        SEP_7,
+      ),
+    );
+    expect(valued.valueMinorUnits).toBe(1_240_447);
+  });
+
+  it("values a holding that has a stated total but no price at all", () => {
+    const valued = expectOk(
+      valuePosition({ ...base, quantity: 100, marketValueMinorUnits: 120_000 }, [], SEP_7),
+    );
+    expect(valued.valueMinorUnits).toBe(120_000);
+    // The implied per-unit figure is reported, dated to the snapshot itself.
+    expect(valued.priceMinorUnits).toBe(1_200);
+    expect(valued.priceAsOf).toEqual(SEP_7);
+  });
+
+  it("falls back to price x quantity when no total is stated", () => {
+    const valued = expectOk(
+      valuePosition(
+        { ...base, quantity: 10, marketValueMinorUnits: null },
+        [{ instrumentId: "i1", asOfDate: SEP_7, priceMinorUnits: 5_000 }],
+        SEP_7,
+      ),
+    );
+    expect(valued.valueMinorUnits).toBe(50_000);
+  });
+
+  it("still reports insufficient data when neither a total nor a price exists", () => {
+    const result = valuePosition({ ...base, quantity: 10 }, [], SEP_7);
+    expect(result.kind).toBe("insufficient-data");
+  });
+
+  it("never uses a stated total from a position dated after the as-of date", () => {
+    const result = valuePosition(
+      {
+        ...base,
+        asOfDate: new Date("2026-09-30T00:00:00Z"),
+        quantity: 10,
+        marketValueMinorUnits: 999_999,
+      },
+      [],
+      SEP_7,
+    );
+    expect(result.kind).toBe("insufficient-data");
+  });
+});

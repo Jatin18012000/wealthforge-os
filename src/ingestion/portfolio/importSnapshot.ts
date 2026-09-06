@@ -375,6 +375,7 @@ async function persistPosition(
     quantity: position.quantity ?? 0,
     unit: position.unit,
     costBasisMinorUnits: position.costBasisMinorUnits,
+    marketValueMinorUnits: position.marketValueMinorUnits,
     trustState: position.trustState,
     sourceDocumentId,
   };
@@ -398,6 +399,7 @@ async function persistPosition(
   const unchanged =
     Math.abs(sameDate.quantity - (position.quantity ?? 0)) < QUANTITY_EPSILON &&
     sameDate.costBasisMinorUnits === position.costBasisMinorUnits &&
+    sameDate.marketValueMinorUnits === position.marketValueMinorUnits &&
     sameDate.trustState === position.trustState;
 
   if (unchanged) return "unchanged";
@@ -416,11 +418,13 @@ async function persistPosition(
       originalValueJson: JSON.stringify({
         quantity: sameDate.quantity,
         costBasisMinorUnits: sameDate.costBasisMinorUnits,
+        marketValueMinorUnits: sameDate.marketValueMinorUnits,
         trustState: sameDate.trustState,
       }),
       revisedValueJson: JSON.stringify({
         quantity: position.quantity,
         costBasisMinorUnits: position.costBasisMinorUnits,
+        marketValueMinorUnits: position.marketValueMinorUnits,
         trustState: position.trustState,
       }),
       source: "portfolio-snapshot-reimport",

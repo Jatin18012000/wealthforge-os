@@ -28,6 +28,12 @@ export interface ExtractedPosition {
   readonly priceMinorUnits: number | null;
   /** Total acquisition cost in paise, when the export reports it. */
   readonly costBasisMinorUnits: number | null;
+  /**
+   * Total current worth in paise, when the export states it outright rather
+   * than leaving it to be computed from a per-unit price. Used verbatim as
+   * the valuation so a statement's own total reconciles exactly.
+   */
+  readonly marketValueMinorUnits: number | null;
   readonly trustState: TrustState;
   readonly validationIssues: readonly string[];
   readonly rowNumber: number;

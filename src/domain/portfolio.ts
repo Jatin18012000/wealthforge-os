@@ -11,6 +11,12 @@ export interface PositionInput {
   readonly quantity: number;
   readonly asOfDate: Date;
   readonly trustState: string;
+  /**
+   * What the source stated this holding was worth at `asOfDate`, when it
+   * stated it outright rather than leaving it to be computed from a
+   * per-unit price. Optional: sources that report only a price omit it.
+   */
+  readonly marketValueMinorUnits?: number | null;
 }
 
 export interface ValuationInput {
@@ -88,11 +94,33 @@ export function valuePosition(
   }
 
   const price = findPriceAsOf(valuations, position.instrumentId, asOf);
-  if (price === null) {
+  const statedValue = position.marketValueMinorUnits ?? null;
+
+  // A source that states the holding's own total worth needs no price to be
+  // valued — the figure is already the answer. Only when neither exists is
+  // the holding genuinely unvaluable.
+  if (price === null && statedValue === null) {
     return insufficient(
       `no price for "${position.instrumentLabel}" dated on or before ${asOf.toISOString().slice(0, 10)}`,
     );
   }
+
+  // The stated total wins over price × quantity. Both describe the same
+  // holding, but the stated figure is the source's own, while the product
+  // is reconstructed from a per-unit price already rounded to whole paise —
+  // which drifts by rupees on a holding of thousands of units and stops the
+  // portfolio reconciling against the statement being read.
+  const valueMinorUnits =
+    statedValue ?? multiplyMinorUnits((price as ValuationInput).priceMinorUnits, position.quantity);
+
+  // When only a stated total exists, the per-unit figure it implies is
+  // reported for display, dated to the position's own snapshot — never to
+  // "now", and never later than the requested as-of date, since a position
+  // dated after `asOf` was already refused above.
+  const impliedPrice =
+    position.quantity === 0 ? 0 : Math.round((statedValue as number) / position.quantity);
+  const priceMinorUnits = price?.priceMinorUnits ?? impliedPrice;
+  const priceAsOf = price?.asOfDate ?? position.asOfDate;
 
   return ok({
     positionId: position.id,
@@ -100,10 +128,10 @@ export function valuePosition(
     instrumentLabel: position.instrumentLabel,
     assetClass: position.assetClass,
     quantity: position.quantity,
-    priceMinorUnits: price.priceMinorUnits,
-    priceAsOf: price.asOfDate,
-    priceAgeDays: Math.floor((asOf.getTime() - price.asOfDate.getTime()) / MS_PER_DAY),
-    valueMinorUnits: multiplyMinorUnits(price.priceMinorUnits, position.quantity),
+    priceMinorUnits,
+    priceAsOf,
+    priceAgeDays: Math.floor((asOf.getTime() - priceAsOf.getTime()) / MS_PER_DAY),
+    valueMinorUnits,
   });
 }
 
