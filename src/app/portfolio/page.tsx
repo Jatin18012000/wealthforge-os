@@ -28,6 +28,12 @@ const ASSET_CLASS_LABELS: Record<string, string> = {
   silver: "Silver",
   epf: "EPF",
   cash: "Cash",
+  // Allocation groups by what a holding is invested in, so a fund's stated
+  // category can surface here as its own class — an equity fund joins
+  // Equity, but a debt or hybrid fund must not be swept in with it.
+  debt: "Debt",
+  hybrid: "Hybrid",
+  commodity: "Commodity",
 };
 
 function assetClassLabel(kind: string): string {

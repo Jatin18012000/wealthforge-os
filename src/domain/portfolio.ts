@@ -17,6 +17,13 @@ export interface PositionInput {
    * per-unit price. Optional: sources that report only a price omit it.
    */
   readonly marketValueMinorUnits?: number | null;
+  /**
+   * The asset category the SOURCE states this holding is invested in, when
+   * it says so — "Equity" for an equity mutual fund. Used only to group the
+   * allocation breakdown by exposure rather than by product wrapper; it
+   * never replaces `assetClass`, which stays the instrument's own kind.
+   */
+  readonly underlyingCategory?: string | null;
 }
 
 export interface ValuationInput {
@@ -37,6 +44,8 @@ export interface ValuedPosition {
   /** Whole days between `priceAsOf` and the requested as-of date. */
   readonly priceAgeDays: number;
   readonly valueMinorUnits: number;
+  /** See PositionInput.underlyingCategory. */
+  readonly underlyingCategory?: string | null;
 }
 
 export interface PortfolioValuation {
@@ -132,6 +141,7 @@ export function valuePosition(
     priceAsOf,
     priceAgeDays: Math.floor((asOf.getTime() - priceAsOf.getTime()) / MS_PER_DAY),
     valueMinorUnits,
+    underlyingCategory: position.underlyingCategory ?? null,
   });
 }
 
@@ -185,11 +195,36 @@ export interface AllocationSlice {
   readonly ratio: number;
 }
 
-/** Allocation by asset class, computed from valued positions only. */
+/**
+ * The class a holding is allocated to: what its money is actually invested
+ * in, rather than the wrapper it is held through.
+ *
+ * An equity mutual fund is an equity holding. Grouping it as "mutual fund"
+ * describes the product, not the exposure, and splits a portfolio's real
+ * equity share across two slices. Where a source states the underlying
+ * category, that wins; otherwise the instrument's own kind stands.
+ *
+ * Normalized to the kind vocabulary's casing and spacing, because a source
+ * writes "Equity" where the taxonomy says "equity" — leaving both would
+ * produce two slices rendering under the same label, silently halving each.
+ * A category the taxonomy has no word for (a debt fund, say) is kept as its
+ * own normalized slice rather than being forced into a class it does not
+ * belong to.
+ */
+export function allocationClassOf(position: ValuedPosition): string {
+  const stated = position.underlyingCategory ?? null;
+  if (stated === null || stated.trim() === "") return position.assetClass;
+  return stated.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+/**
+ * Allocation by asset class, computed from valued positions only, and
+ * grouped by what each holding is invested in — see `allocationClassOf`.
+ */
 export function allocationByAssetClass(
   valuation: PortfolioValuation,
 ): Computed<readonly AllocationSlice[]> {
-  return allocationBy(valuation, (position) => position.assetClass);
+  return allocationBy(valuation, allocationClassOf);
 }
 
 /** Concentration per individual instrument. */

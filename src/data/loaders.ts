@@ -319,6 +319,11 @@ export async function loadPositionsAsOf(
       asOfDate: row.asOfDate,
       trustState: row.trustState,
       marketValueMinorUnits: quantityWasCorrected ? null : row.marketValueMinorUnits,
+      // Groups the allocation breakdown by what the holding is invested in
+      // rather than the wrapper it is held through — an equity mutual fund
+      // belongs in Equity. Never replaces `assetClass`, which the holdings
+      // table still shows so a fund stays distinguishable from a share.
+      underlyingCategory: row.instrument.category,
     };
   });
 }

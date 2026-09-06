@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   allocationByAssetClass,
+  allocationClassOf,
   computeNetWorth,
   concentrationByInstrument,
   expectOk,
@@ -273,5 +274,74 @@ describe("valuing from a source-stated total", () => {
       SEP_7,
     );
     expect(result.kind).toBe("insufficient-data");
+  });
+});
+
+describe("allocation groups by what a holding is invested in", () => {
+  const SEP_7 = new Date("2026-09-07T00:00:00Z");
+  const position = (
+    id: string,
+    assetClass: string,
+    valueMinorUnits: number,
+    underlyingCategory: string | null,
+  ): PositionInput => ({
+    id,
+    instrumentId: id,
+    instrumentLabel: id,
+    assetClass,
+    quantity: 1,
+    asOfDate: SEP_7,
+    trustState: "validated",
+    marketValueMinorUnits: valueMinorUnits,
+    underlyingCategory,
+  });
+
+  it("puts an equity mutual fund in the same slice as a directly-held share", () => {
+    const valuation = expectOk(
+      valuePortfolio(
+        [
+          position("fund", "mutual_fund", 100_000, "Equity"),
+          position("share", "equity", 50_000, null),
+        ],
+        [],
+        SEP_7,
+      ),
+    );
+    const allocation = expectOk(allocationByAssetClass(valuation));
+
+    // One slice, not two — grouping the fund as "mutual_fund" would split
+    // the portfolio's real equity exposure across two rows.
+    expect(allocation).toHaveLength(1);
+    expect(allocation[0]?.key).toBe("equity");
+    expect(allocation[0]?.valueMinorUnits).toBe(150_000);
+  });
+
+  it("does not sweep a non-equity fund into equity", () => {
+    const valuation = expectOk(
+      valuePortfolio(
+        [
+          position("equity-fund", "mutual_fund", 100_000, "Equity"),
+          position("debt-fund", "mutual_fund", 40_000, "Debt"),
+          position("gold", "gold", 10_000, null),
+        ],
+        [],
+        SEP_7,
+      ),
+    );
+    const allocation = expectOk(allocationByAssetClass(valuation));
+    const byKey = Object.fromEntries(allocation.map((a) => [a.key, a.valueMinorUnits]));
+
+    expect(byKey).toEqual({ equity: 100_000, debt: 40_000, gold: 10_000 });
+  });
+
+  it("normalizes a source's casing and spacing so one class is never two slices", () => {
+    // "Equity" from a statement and "equity" from the taxonomy must collapse
+    // into a single slice; two would render under the same label, each
+    // showing half the real share.
+    expect(allocationClassOf({ assetClass: "mutual_fund", underlyingCategory: "Equity" } as never)).toBe("equity");
+    expect(allocationClassOf({ assetClass: "mutual_fund", underlyingCategory: " Large Cap " } as never)).toBe("large_cap");
+    expect(allocationClassOf({ assetClass: "equity", underlyingCategory: null } as never)).toBe("equity");
+    // A blank category is not a class; the instrument's own kind stands.
+    expect(allocationClassOf({ assetClass: "gold", underlyingCategory: "  " } as never)).toBe("gold");
   });
 });

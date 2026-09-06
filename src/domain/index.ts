@@ -28,6 +28,7 @@ export {
   valuePortfolio,
   findPriceAsOf,
   allocationByAssetClass,
+  allocationClassOf,
   concentrationByInstrument,
   flagConcentration,
   type PositionInput,
