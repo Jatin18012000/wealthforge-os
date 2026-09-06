@@ -248,13 +248,41 @@ async function resolveInstrument(
   const existing = await tx.instrument.findFirst({
     where: { kind: position.assetClass, identifier: position.identifier },
   });
-  if (existing !== null) return { id: existing.id, created: false };
+
+  if (existing !== null) {
+    // Backfill descriptive metadata this statement supplies and the record
+    // is still missing — a later export can carry columns an earlier one
+    // lacked. A value already on record is NOT overwritten: replacing a
+    // stored source claim with a differing one silently would discard the
+    // earlier claim with no trace, so a genuine reclassification is left to
+    // be made deliberately rather than absorbed by an import.
+    const backfill: Record<string, string> = {};
+    if (existing.amc === null && position.amc !== null) backfill.amc = position.amc;
+    if (existing.category === null && position.category !== null) {
+      backfill.category = position.category;
+    }
+    if (existing.subCategory === null && position.subCategory !== null) {
+      backfill.subCategory = position.subCategory;
+    }
+    if (existing.source === null && position.source !== null) {
+      backfill.source = position.source;
+    }
+
+    if (Object.keys(backfill).length > 0) {
+      await tx.instrument.update({ where: { id: existing.id }, data: backfill });
+    }
+    return { id: existing.id, created: false };
+  }
 
   const created = await tx.instrument.create({
     data: {
       kind: position.assetClass,
       identifier: position.identifier,
       displayName: position.displayName,
+      amc: position.amc,
+      category: position.category,
+      subCategory: position.subCategory,
+      source: position.source,
     },
   });
   return { id: created.id, created: true };
@@ -376,6 +404,7 @@ async function persistPosition(
     unit: position.unit,
     costBasisMinorUnits: position.costBasisMinorUnits,
     marketValueMinorUnits: position.marketValueMinorUnits,
+    reportedXirrBps: position.reportedXirrBps,
     trustState: position.trustState,
     sourceDocumentId,
   };
@@ -400,6 +429,11 @@ async function persistPosition(
     Math.abs(sameDate.quantity - (position.quantity ?? 0)) < QUANTITY_EPSILON &&
     sameDate.costBasisMinorUnits === position.costBasisMinorUnits &&
     sameDate.marketValueMinorUnits === position.marketValueMinorUnits &&
+    // A restated XIRR for the same date is the source correcting itself.
+    // It drives no calculation here, but recording the restatement keeps
+    // both claims on file rather than quietly keeping whichever arrived
+    // first.
+    sameDate.reportedXirrBps === position.reportedXirrBps &&
     sameDate.trustState === position.trustState;
 
   if (unchanged) return "unchanged";
@@ -419,12 +453,14 @@ async function persistPosition(
         quantity: sameDate.quantity,
         costBasisMinorUnits: sameDate.costBasisMinorUnits,
         marketValueMinorUnits: sameDate.marketValueMinorUnits,
+        reportedXirrBps: sameDate.reportedXirrBps,
         trustState: sameDate.trustState,
       }),
       revisedValueJson: JSON.stringify({
         quantity: position.quantity,
         costBasisMinorUnits: position.costBasisMinorUnits,
         marketValueMinorUnits: position.marketValueMinorUnits,
+        reportedXirrBps: position.reportedXirrBps,
         trustState: position.trustState,
       }),
       source: "portfolio-snapshot-reimport",

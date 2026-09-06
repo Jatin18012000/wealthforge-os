@@ -111,6 +111,26 @@ model Instrument {
   /// "market data provider unavailable").
   marketSymbol String?
 
+  /// Descriptive metadata a statement reports about the instrument itself,
+  /// as opposed to about a holding of it: these do not change between two
+  /// snapshots of the same fund, so they live here rather than being
+  /// repeated on every PositionSnapshot.
+  ///
+  /// All source-reported and all nullable — most exports carry none of
+  /// them. They are retained for provenance and reference; nothing in the
+  /// engine calculates from them. In particular `category` is the SOURCE's
+  /// own wording (a fund-house statement says "Equity" for an equity fund)
+  /// and is deliberately NOT the same thing as `kind`, which is this app's
+  /// own asset-class taxonomy and the field every calculation uses.
+  /// Fund house / AMC, e.g. "PPFAS Mutual Fund".
+  amc         String?
+  /// Source-reported category, e.g. "Equity".
+  category    String?
+  /// Source-reported sub-category, e.g. "Flexi Cap".
+  subCategory String?
+  /// Where the holding is held, e.g. "Groww" — the platform, not the file.
+  source      String?
+
   positionSnapshots PositionSnapshot[]
   valuations        Valuation[]
   activities        Activity[]
@@ -144,6 +164,19 @@ model PositionSnapshot {
   /// Null for sources that report only a price; those are valued the usual
   /// way. See `valuePosition` in src/domain/portfolio.ts.
   marketValueMinorUnits Int?
+
+  /// The XIRR the SOURCE reported for this holding at this date, in basis
+  /// points (283 = 2.83%; negative is allowed and meaningful). Unlike the
+  /// instrument metadata above this genuinely belongs per snapshot — it is
+  /// a return figure at a point in time, not a property of the fund.
+  ///
+  /// Stored for provenance only, and named `reported` precisely so it can
+  /// never be mistaken for this app's own return calculation
+  /// (src/domain/returns.ts), which is derived from recorded cash flows and
+  /// is the only figure any screen or total may use. The two can legitimately
+  /// disagree — the statement computes over the platform's own record of
+  /// transactions, which is not necessarily what this system has ingested.
+  reportedXirrBps Int?
 
   sourceDocumentId String?
   sourceDocument   SourceDocument? @relation(fields: [sourceDocumentId], references: [id])

@@ -34,6 +34,21 @@ export interface ExtractedPosition {
    * the valuation so a statement's own total reconciles exactly.
    */
   readonly marketValueMinorUnits: number | null;
+  /**
+   * Descriptive metadata the source reports, retained for provenance.
+   * Nothing is calculated from these — `category` in particular is the
+   * source's own wording and never substitutes for `assetClass`.
+   */
+  readonly amc: string | null;
+  readonly category: string | null;
+  readonly subCategory: string | null;
+  readonly source: string | null;
+  /**
+   * The XIRR the source reported for this holding, in basis points
+   * (283 = 2.83%, negative allowed). Provenance only: this app's own
+   * returns are derived from cash flows, never read from here.
+   */
+  readonly reportedXirrBps: number | null;
   readonly trustState: TrustState;
   readonly validationIssues: readonly string[];
   readonly rowNumber: number;

@@ -9,6 +9,7 @@ import {
   importPortfolioSnapshot,
   parseCsv,
 } from "../../src/ingestion/portfolio";
+import { parsePercentToBps } from "../../src/ingestion/portfolio/normalizeSnapshot";
 import { createTestDb } from "../setup/testDb";
 
 const FIXTURES = path.resolve(__dirname, "../fixtures/portfolio");
@@ -713,11 +714,87 @@ describe("mutual-fund statements that report value rather than NAV", () => {
     expect(position.costBasisMinorUnits).toBe(15_000 * 100);
   });
 
+  it("preserves the descriptive columns the statement carries", async () => {
+    await importPortfolioSnapshot(db, multiFolio(), MF);
+
+    const kotak = await db.instrument.findFirstOrThrow({
+      where: { displayName: "Kotak Mid Cap Fund" },
+    });
+    expect(kotak.amc).toBe("Kotak Mutual Fund");
+    expect(kotak.subCategory).toBe("Mid Cap");
+    expect(kotak.source).toBe("Groww");
+
+    // The statement's own wording is retained as `category`, and is NOT
+    // allowed to become `kind` — the engine's asset class stays what the
+    // import was told it was, or every "Equity"-categorised fund would be
+    // reclassified out of mutual funds by a descriptive column.
+    expect(kotak.category).toBe("Equity");
+    expect(kotak.kind).toBe("mutual_fund");
+
+    const position = await db.positionSnapshot.findFirstOrThrow({
+      where: { instrumentId: kotak.id },
+    });
+    // "24.3%" -> 2430 basis points.
+    expect(position.reportedXirrBps).toBe(2_430);
+  });
+
+  it("keeps a negative reported XIRR as a negative figure", async () => {
+    await importPortfolioSnapshot(db, multiFolio(), MF);
+
+    const flat = await db.instrument.findFirstOrThrow({
+      where: { identifier: "Axis Nifty Bank Index Fund · 910238676261" },
+    });
+    const position = await db.positionSnapshot.findFirstOrThrow({
+      where: { instrumentId: flat.id },
+    });
+    // This folio's fixture row reports 0%, which must be 0 rather than null.
+    expect(position.reportedXirrBps).toBe(0);
+  });
+
+  it("leaves descriptive fields null when the export has no such columns", async () => {
+    await importPortfolioSnapshot(db, fixture("equity-v1-base.csv"), EQUITY);
+
+    const infosys = await db.instrument.findFirstOrThrow({ where: { identifier: "INFY" } });
+    expect(infosys.amc).toBeNull();
+    expect(infosys.category).toBeNull();
+    expect(infosys.subCategory).toBeNull();
+    expect(infosys.source).toBeNull();
+
+    const position = await db.positionSnapshot.findFirstOrThrow({
+      where: { instrumentId: infosys.id },
+    });
+    expect(position.reportedXirrBps).toBeNull();
+  });
+
   it("still refuses a layout that states neither a date nor an asset class", async () => {
     // The guard is unchanged: this file states its own date, so withholding
     // the asset class alone must still be refused.
     await expect(
       importPortfolioSnapshot(db, multiFolio(), {}),
     ).rejects.toThrow(/states neither an as-of date nor an asset class/);
+  });
+});
+
+describe("reported-percentage parsing", () => {
+  it("converts a percentage to basis points, including negatives and zero", () => {
+    expect(parsePercentToBps("2.83%").bps).toBe(283);
+    expect(parsePercentToBps("24.3%").bps).toBe(2_430);
+    expect(parsePercentToBps("-2.45%").bps).toBe(-245);
+    expect(parsePercentToBps("-0.11%").bps).toBe(-11);
+    expect(parsePercentToBps("0%").bps).toBe(0);
+    // The % sign is optional, and thousands separators are tolerated.
+    expect(parsePercentToBps("12.5").bps).toBe(1_250);
+  });
+
+  it("returns null without an issue when the cell is simply absent", () => {
+    // No reported XIRR is not a reported return of zero.
+    expect(parsePercentToBps("")).toEqual({ bps: null, issue: null });
+    expect(parsePercentToBps("   ")).toEqual({ bps: null, issue: null });
+  });
+
+  it("reports unreadable text as an issue rather than dropping it silently", () => {
+    const result = parsePercentToBps("N/A");
+    expect(result.bps).toBeNull();
+    expect(result.issue).toContain("not a percentage");
   });
 });

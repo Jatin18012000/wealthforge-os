@@ -249,6 +249,15 @@ export function extractZerodhaSheet(
       // Zerodha reports a per-unit closing price, not a holding total, so
       // valuation goes through the usual price x quantity path.
       marketValueMinorUnits: null,
+      // This statement carries none of the fund-house descriptive columns.
+      // Its `Sector` is deliberately not mapped to `category`: it already
+      // feeds deriveAssetClass above, and copying it into a descriptive
+      // field would imply the two are interchangeable.
+      amc: null,
+      category: null,
+      subCategory: null,
+      source: null,
+      reportedXirrBps: null,
       trustState,
       validationIssues,
       rowNumber: row,

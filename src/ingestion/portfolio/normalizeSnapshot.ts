@@ -5,6 +5,7 @@ import type {
   ExtractedSnapshot,
   PortfolioAssetClass,
   RawSnapshotFile,
+  RawSnapshotRow,
 } from "./types";
 
 /**
@@ -53,6 +54,19 @@ export const COLUMN_ALIASES = {
    * (and then flags them as duplicate rows of each other).
    */
   folio: ["folio no.", "folio no", "folio number", "folio"],
+  /**
+   * Descriptive columns, kept for provenance. None of these feed a
+   * calculation — `category` is the source's own wording and never
+   * substitutes for the asset class the engine uses.
+   */
+  amc: ["amc", "amc name", "fund house"],
+  // Deliberately NOT "asset class": that phrasing would imply the file's
+  // value drives the engine's asset class, which it does not — this column
+  // is descriptive text only.
+  category: ["category"],
+  subCategory: ["sub-category", "sub category", "subcategory"],
+  source: ["source", "platform", "broker"],
+  xirr: ["xirr", "xirr %", "xirr (%)", "xirr%"],
 } as const;
 
 const UNIT_BY_ASSET_CLASS: Record<PortfolioAssetClass, string> = {
@@ -86,6 +100,32 @@ export function parseQuantity(value: string): { quantity: number | null; issue: 
   return { quantity, issue: null };
 }
 
+/**
+ * Parses a reported percentage into basis points ("2.83%" -> 283, "-2.45%"
+ * -> -245). Negative is meaningful, not an error, unlike a negative quantity.
+ *
+ * Returns null for an absent or unreadable value rather than 0: a fund that
+ * reported no XIRR has not reported a flat return, and recording one would
+ * invent a figure. Unreadable text is reported as an issue so it surfaces
+ * for review instead of vanishing.
+ */
+export function parsePercentToBps(value: string): {
+  bps: number | null;
+  issue: string | null;
+} {
+  const cleaned = value.replace(/[%,\s]/g, "");
+  if (cleaned === "") return { bps: null, issue: null };
+  if (!/^[+-]?\d*\.?\d+$/.test(cleaned)) {
+    return { bps: null, issue: `XIRR is not a percentage: "${value}"` };
+  }
+
+  const percent = Number(cleaned);
+  if (!Number.isFinite(percent)) {
+    return { bps: null, issue: `XIRR is not a finite number: "${value}"` };
+  }
+  return { bps: Math.round(percent * 100), issue: null };
+}
+
 export interface NormalizeOptions {
   /**
    * The date this snapshot describes. Required, never inferred from the file
@@ -111,6 +151,18 @@ export function extractSnapshot(
   const totalCostColumn = findColumn(file.headers, COLUMN_ALIASES.totalCost);
   const totalValueColumn = findColumn(file.headers, COLUMN_ALIASES.totalValue);
   const folioColumn = findColumn(file.headers, COLUMN_ALIASES.folio);
+  const amcColumn = findColumn(file.headers, COLUMN_ALIASES.amc);
+  const categoryColumn = findColumn(file.headers, COLUMN_ALIASES.category);
+  const subCategoryColumn = findColumn(file.headers, COLUMN_ALIASES.subCategory);
+  const sourceColumn = findColumn(file.headers, COLUMN_ALIASES.source);
+  const xirrColumn = findColumn(file.headers, COLUMN_ALIASES.xirr);
+
+  /** A descriptive cell: absent or blank is fine, and never an issue. */
+  const describedBy = (column: string | null, row: RawSnapshotRow): string | null => {
+    if (column === null) return null;
+    const value = (row.cells[column] ?? "").trim();
+    return value === "" ? null : value;
+  };
 
   // A holding needs something to identify it and something to count. Either
   // an identifier or a name will do for identity; quantity is mandatory.
@@ -189,6 +241,11 @@ export function extractSnapshot(
       validationIssues,
     });
 
+    const { bps: xirrBps, issue: xirrIssue } = parsePercentToBps(
+      xirrColumn ? (row.cells[xirrColumn] ?? "") : "",
+    );
+    if (xirrIssue) validationIssues.push(xirrIssue);
+
     const trustState: TrustState = validationIssues.length === 0 ? "validated" : "needs_review";
 
     positions.push({
@@ -200,6 +257,11 @@ export function extractSnapshot(
       priceMinorUnits,
       costBasisMinorUnits,
       marketValueMinorUnits: totalValueMinorUnits,
+      amc: describedBy(amcColumn, row),
+      category: describedBy(categoryColumn, row),
+      subCategory: describedBy(subCategoryColumn, row),
+      source: describedBy(sourceColumn, row),
+      reportedXirrBps: xirrBps,
       trustState,
       validationIssues,
       rowNumber: row.rowNumber,
