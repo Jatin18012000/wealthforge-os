@@ -22,7 +22,7 @@
     "backup:export": "tsx scripts/backup-cli.ts export",
     "backup:restore": "tsx scripts/backup-cli.ts restore",
     "db:demo": "tsx prisma/demo-seed.ts",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force --skip-seed"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

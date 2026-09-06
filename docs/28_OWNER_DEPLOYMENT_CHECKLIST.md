@@ -104,10 +104,15 @@ npx prisma migrate deploy
 - [ ] All migrations under `prisma/migrations/` apply cleanly to a fresh
   `data/wealthforge.db`.
 
-(`pnpm db:reset` — i.e. `prisma migrate reset --force` — is available if
-you ever need to wipe and re-migrate from scratch during testing, but it
-is destructive to whatever is currently in your local database, so use
-it deliberately, not as a routine step.)
+(`pnpm db:reset` — i.e. `prisma migrate reset --force --skip-seed` — is
+available if you ever need to wipe and re-migrate from scratch during
+testing. It leaves you with an **empty** database: `--skip-seed` is
+deliberate, because `prisma migrate reset` otherwise runs the seed script
+declared under `"prisma"` in `package.json` and silently repopulates
+fixture data. It is destructive to whatever is currently in your local
+database, so use it deliberately, not as a routine step. To load fixtures
+you must now ask for them explicitly: `pnpm db:seed` for the minimal set,
+`pnpm db:demo` for the full demo.)
 
 ## 5. Confirm the database file location
 
@@ -134,10 +139,26 @@ pnpm db:demo
   seeded.
 
 Then start the app (next section) and confirm the Command Center shows
-non-empty, plausible demo figures. Once confirmed, you can reset the
-database (`pnpm db:reset`, or just delete `data/wealthforge.db` and
-re-run migration) before importing your **real** data, so demo fixtures
-never mix with your actual finances.
+non-empty, plausible demo figures.
+
+**Once confirmed, wipe the demo data before importing anything real**, so
+fixtures never mix with your actual finances:
+
+```bash
+pnpm db:reset
+```
+
+- [ ] The app now shows empty states everywhere — no goals, no
+  liabilities, no insurance policies, no imported documents.
+
+That last check matters. Verify it in the UI rather than assuming: a
+database that *looks* reset but still holds fixture goals or a fixture
+home loan will quietly sit alongside your real data forever, and nothing
+downstream will flag it, because a seeded row is indistinguishable from
+one you entered yourself.
+
+(Deleting `data/wealthforge.db` and re-running `npx prisma migrate deploy`
+achieves the same thing if you prefer.)
 
 ## 7. Start the application
 
