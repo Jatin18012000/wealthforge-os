@@ -1,4 +1,5 @@
 import { copyFile, rm, writeFile } from "node:fs/promises";
+import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { expectOk, valuePortfolio } from "../../src/domain";
@@ -562,8 +563,16 @@ describe("mutual-fund statements that report value rather than NAV", () => {
   const SEP_7 = new Date("2026-09-07T00:00:00Z");
   const MF = { assetClass: "mutual_fund" as const };
   const multiFolio = () => fixture("mutualfund-v3-multi-folio.xlsx");
+  const scratchFiles: string[] = [];
+  const scratchStatement = (name: string, lines: readonly string[]): string => {
+    const filePath = path.join(FIXTURES, `scratch-${name}`);
+    writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
+    scratchFiles.push(filePath);
+    return filePath;
+  };
 
   afterAll(async () => {
+    for (const file of scratchFiles) rmSync(file, { force: true });
     await cleanup();
   });
 
@@ -764,6 +773,88 @@ describe("mutual-fund statements that report value rather than NAV", () => {
       where: { instrumentId: infosys.id },
     });
     expect(position.reportedXirrBps).toBeNull();
+  });
+
+  it("takes the newest stated metadata and keeps the claim it replaced on file", async () => {
+    await importPortfolioSnapshot(db, multiFolio(), MF);
+
+    const before = await db.instrument.findFirstOrThrow({
+      where: { displayName: "Kotak Mid Cap Fund" },
+    });
+    expect(before.subCategory).toBe("Mid Cap");
+
+    // A later statement restates the fund's sub-category. The newest value
+    // wins outright rather than being ignored as "already set".
+    const restated = scratchStatement("restated-subcategory.csv", [
+      "HOLDINGS AS ON 2026-09-08",
+      "Scheme Name,AMC,Category,Sub-category,Folio No.,Source,Units,Invested Value,Current Value",
+      "Kotak Mid Cap Fund,Kotak Mutual Fund,Equity,Small Cap,18854587,Groww,50,15000,16500",
+    ]);
+    await importPortfolioSnapshot(db, restated, MF);
+
+    const after = await db.instrument.findFirstOrThrow({ where: { id: before.id } });
+    expect(after.subCategory).toBe("Small Cap");
+
+    // The displaced claim is retained, not erased.
+    const revision = await db.revision.findFirstOrThrow({
+      where: { entityType: "instrument", entityId: before.id },
+    });
+    expect(JSON.parse(revision.originalValueJson)).toEqual({ subCategory: "Mid Cap" });
+    expect(JSON.parse(revision.revisedValueJson)).toEqual({ subCategory: "Small Cap" });
+  });
+
+  it("does not let a statement without the columns blank out metadata already held", async () => {
+    await importPortfolioSnapshot(db, multiFolio(), MF);
+    const before = await db.instrument.findFirstOrThrow({
+      where: { displayName: "Kotak Mid Cap Fund" },
+    });
+
+    // Same holding, from an export carrying none of the descriptive columns.
+    // Absence is not an assertion that the fields are empty.
+    const bare = scratchStatement("bare-columns.csv", [
+      "HOLDINGS AS ON 2026-09-08",
+      "Scheme Name,Folio No.,Units,Invested Value,Current Value",
+      "Kotak Mid Cap Fund,18854587,50,15000,16500",
+    ]);
+    await importPortfolioSnapshot(db, bare, MF);
+
+    const after = await db.instrument.findFirstOrThrow({ where: { id: before.id } });
+    expect(after.amc).toBe("Kotak Mutual Fund");
+    expect(after.category).toBe("Equity");
+    expect(after.subCategory).toBe("Mid Cap");
+    expect(after.source).toBe("Groww");
+    // Nothing was displaced, so nothing was recorded as a revision.
+    expect(
+      await db.revision.count({ where: { entityType: "instrument", entityId: before.id } }),
+    ).toBe(0);
+  });
+
+  it("records no revision when metadata merely fills a blank", async () => {
+    // First import carries no descriptive columns at all.
+    const bare = scratchStatement("fills-blank-first.csv", [
+      "HOLDINGS AS ON 2026-09-07",
+      "Scheme Name,Folio No.,Units,Invested Value,Current Value",
+      "Some Fund,999,10,1000,1100",
+    ]);
+    await importPortfolioSnapshot(db, bare, MF);
+    const instrument = await db.instrument.findFirstOrThrow({
+      where: { displayName: "Some Fund" },
+    });
+    expect(instrument.amc).toBeNull();
+
+    const withMeta = scratchStatement("fills-blank-second.csv", [
+      "HOLDINGS AS ON 2026-09-08",
+      "Scheme Name,AMC,Folio No.,Units,Invested Value,Current Value",
+      "Some Fund,Some AMC,999,10,1000,1100",
+    ]);
+    await importPortfolioSnapshot(db, withMeta, MF);
+
+    const after = await db.instrument.findFirstOrThrow({ where: { id: instrument.id } });
+    expect(after.amc).toBe("Some AMC");
+    // Filling a blank displaces no earlier claim.
+    expect(
+      await db.revision.count({ where: { entityType: "instrument", entityId: instrument.id } }),
+    ).toBe(0);
   });
 
   it("still refuses a layout that states neither a date nor an asset class", async () => {

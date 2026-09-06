@@ -241,6 +241,72 @@ async function resolveSnapshot(
   };
 }
 
+/** The descriptive instrument fields a statement can restate. */
+const INSTRUMENT_METADATA_FIELDS = ["amc", "category", "subCategory", "source"] as const;
+
+type InstrumentMetadataField = (typeof INSTRUMENT_METADATA_FIELDS)[number];
+
+/**
+ * Brings an instrument's descriptive metadata up to date with the statement
+ * being imported: the newest stated value wins.
+ *
+ * Two rules keep "newest wins" from becoming "newest destroys":
+ *
+ * - A null incoming value never overwrites a stored one. An export that
+ *   simply lacks a column is not asserting the field is empty, so importing
+ *   a Zerodha statement cannot blank out the AMC a fund-house statement
+ *   supplied.
+ * - A value that genuinely changes is recorded as a Revision before being
+ *   replaced, the same way a corrected position snapshot is. The newest
+ *   claim is what the app shows, and the claim it replaced is still on
+ *   file — the alternative is a reclassification that silently erases what
+ *   the previous statement said.
+ */
+async function refreshInstrumentMetadata(
+  tx: Prisma.TransactionClient,
+  existing: { id: string } & Record<InstrumentMetadataField, string | null>,
+  position: ExtractedPosition,
+): Promise<void> {
+  const incoming: Record<InstrumentMetadataField, string | null> = {
+    amc: position.amc,
+    category: position.category,
+    subCategory: position.subCategory,
+    source: position.source,
+  };
+
+  const updates: Partial<Record<InstrumentMetadataField, string>> = {};
+  const replaced: Partial<Record<InstrumentMetadataField, string | null>> = {};
+
+  for (const field of INSTRUMENT_METADATA_FIELDS) {
+    const next = incoming[field];
+    if (next === null || next === existing[field]) continue;
+
+    updates[field] = next;
+    // Only a value that actually existed is a claim being displaced;
+    // filling a blank replaces nothing and needs no revision.
+    if (existing[field] !== null) replaced[field] = existing[field];
+  }
+
+  if (Object.keys(updates).length === 0) return;
+
+  await tx.instrument.update({ where: { id: existing.id }, data: updates });
+
+  if (Object.keys(replaced).length > 0) {
+    await tx.revision.create({
+      data: {
+        entityType: "instrument",
+        entityId: existing.id,
+        originalValueJson: JSON.stringify(replaced),
+        revisedValueJson: JSON.stringify(
+          Object.fromEntries(Object.keys(replaced).map((key) => [key, updates[key as InstrumentMetadataField]])),
+        ),
+        source: "portfolio-snapshot-import",
+        reason: "instrument metadata restated by a newer statement",
+      },
+    });
+  }
+}
+
 async function resolveInstrument(
   tx: Prisma.TransactionClient,
   position: ExtractedPosition,
@@ -250,27 +316,7 @@ async function resolveInstrument(
   });
 
   if (existing !== null) {
-    // Backfill descriptive metadata this statement supplies and the record
-    // is still missing — a later export can carry columns an earlier one
-    // lacked. A value already on record is NOT overwritten: replacing a
-    // stored source claim with a differing one silently would discard the
-    // earlier claim with no trace, so a genuine reclassification is left to
-    // be made deliberately rather than absorbed by an import.
-    const backfill: Record<string, string> = {};
-    if (existing.amc === null && position.amc !== null) backfill.amc = position.amc;
-    if (existing.category === null && position.category !== null) {
-      backfill.category = position.category;
-    }
-    if (existing.subCategory === null && position.subCategory !== null) {
-      backfill.subCategory = position.subCategory;
-    }
-    if (existing.source === null && position.source !== null) {
-      backfill.source = position.source;
-    }
-
-    if (Object.keys(backfill).length > 0) {
-      await tx.instrument.update({ where: { id: existing.id }, data: backfill });
-    }
+    await refreshInstrumentMetadata(tx, existing, position);
     return { id: existing.id, created: false };
   }
 
