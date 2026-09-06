@@ -444,8 +444,9 @@ describe("portfolio snapshot ingestion", () => {
     // The statement's own preamble date, never the filename, never guessed.
     expect(audit.asOf.toISOString().slice(0, 10)).toBe("2026-09-02");
 
+    // The folio is part of the holding's identity — see the folio tests below.
     const fund = await db.instrument.findFirstOrThrow({
-      where: { identifier: "Parag Parikh Flexi Cap Fund" },
+      where: { identifier: "Parag Parikh Flexi Cap Fund · 1234567/89" },
     });
     const position = await db.positionSnapshot.findFirstOrThrow({
       where: { instrumentId: fund.id },
@@ -456,10 +457,17 @@ describe("portfolio snapshot ingestion", () => {
     // verbatim as the cost basis — never fabricated, never recomputed.
     expect(position.quantity).toBeCloseTo(1250.456, 6);
     expect(position.costBasisMinorUnits).toBe(85_000 * 100);
-    // This export carries no NAV/price column at all — price must be
-    // absent, never guessed at.
-    expect(await db.valuation.count({ where: { instrumentId: fund.id } })).toBe(0);
     expect(position.trustState).toBe("validated");
+
+    // The statement reports no per-unit NAV, but it does state what the
+    // holding was worth on its own date — so it is priced from that rather
+    // than left unvalued awaiting a market lookup it never needed.
+    // 95,210.30 / 1250.456 units = 76.14 per unit.
+    const valuation = await db.valuation.findFirstOrThrow({
+      where: { instrumentId: fund.id },
+    });
+    expect(valuation.priceMinorUnits).toBe(7_614);
+    expect(valuation.asOfDate.toISOString().slice(0, 10)).toBe("2026-09-02");
   });
 
   it("refuses rather than silently trusting one date when the statement's own 'HOLDINGS AS ON' date disagrees with an explicitly supplied asOf", async () => {
@@ -545,5 +553,142 @@ describe("displayFileName override", () => {
       EQUITY,
     );
     expect(audit.fileName).toBe("equity-v1-base.csv");
+  });
+});
+
+describe("mutual-fund statements that report value rather than NAV", () => {
+  const { db, cleanup } = createTestDb();
+  const SEP_7 = new Date("2026-09-07T00:00:00Z");
+  const MF = { assetClass: "mutual_fund" as const };
+  const multiFolio = () => fixture("mutualfund-v3-multi-folio.xlsx");
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
+  beforeEach(async () => {
+    await db.revision.deleteMany();
+    await db.positionSnapshot.deleteMany();
+    await db.valuation.deleteMany();
+    await db.activity.deleteMany();
+    await db.instrument.deleteMany();
+    await db.auditEvent.deleteMany();
+    await db.sourceDocument.deleteMany();
+  });
+
+  it("keeps one scheme held under three folios as three separate holdings", async () => {
+    const audit = await importPortfolioSnapshot(db, multiFolio(), MF);
+
+    // Five rows, five instruments: the three Axis folios must NOT collapse
+    // into one instrument, and must not be flagged as duplicates of each
+    // other — they are distinct holdings that happen to share a scheme name.
+    expect(audit.rowsScanned).toBe(5);
+    expect(audit.instrumentsCreated).toBe(5);
+    expect(audit.positionsCreated).toBe(5);
+    expect(audit.rowsNeedingReview).toBe(0);
+    expect(audit.issues.some((issue) => issue.includes("appears 3 times"))).toBe(false);
+
+    const axis = await db.instrument.findMany({
+      where: { displayName: "Axis Nifty Bank Index Fund" },
+      orderBy: { identifier: "asc" },
+    });
+    expect(axis).toHaveLength(3);
+    // Folio-level provenance survives on the identifier.
+    expect(axis.map((i) => i.identifier)).toEqual([
+      "Axis Nifty Bank Index Fund · 910183573136",
+      "Axis Nifty Bank Index Fund · 910183697125",
+      "Axis Nifty Bank Index Fund · 910238676261",
+    ]);
+
+    // Each folio keeps its own units rather than being summed.
+    const quantities = await Promise.all(
+      axis.map(async (instrument) =>
+        (
+          await db.positionSnapshot.findFirstOrThrow({
+            where: { instrumentId: instrument.id },
+          })
+        ).quantity,
+      ),
+    );
+    expect(quantities.sort((a, b) => a - b)).toEqual([100, 500, 1000]);
+  });
+
+  it("derives the unit price from the statement's own value and units, never from a market lookup", async () => {
+    await importPortfolioSnapshot(db, multiFolio(), MF);
+
+    const kotak = await db.instrument.findFirstOrThrow({
+      where: { displayName: "Kotak Mid Cap Fund" },
+    });
+    const valuation = await db.valuation.findFirstOrThrow({
+      where: { instrumentId: kotak.id },
+    });
+
+    // 16,000.00 over 50 units = 320.00 per unit, dated the statement's date.
+    expect(valuation.priceMinorUnits).toBe(32_000);
+    expect(valuation.asOfDate.toISOString().slice(0, 10)).toBe("2026-09-07");
+    // Sourced from the statement, not from any market data provider.
+    expect(valuation.source).toContain("portfolio-snapshot:");
+  });
+
+  it("leaves a holding unpriced when the statement reports neither a price nor a value", async () => {
+    await importPortfolioSnapshot(db, multiFolio(), MF);
+
+    const silent = await db.instrument.findFirstOrThrow({
+      where: { displayName: "Silent Fund" },
+    });
+    // No value to derive from, so no price is invented — the holding stays
+    // unvalued and is reported as an exclusion rather than counted as zero.
+    expect(await db.valuation.count({ where: { instrumentId: silent.id } })).toBe(0);
+
+    const valuation = valuePortfolio(
+      await loadPositionsAsOf(db, SEP_7),
+      await loadValuations(db, SEP_7),
+      SEP_7,
+    );
+    const valued = expectOk(valuation);
+    expect(valued.exclusions.map((e) => e.label)).toEqual(["Silent Fund"]);
+    expect(valued.exclusions[0]?.reason).toContain("no price for");
+  });
+
+  it("includes the valued mutual-fund holdings in the portfolio total", async () => {
+    await importPortfolioSnapshot(db, multiFolio(), MF);
+
+    const valued = expectOk(
+      valuePortfolio(
+        await loadPositionsAsOf(db, SEP_7),
+        await loadValuations(db, SEP_7),
+        SEP_7,
+      ),
+    );
+
+    // Four priced holdings: 1,200 + 6,000 + 12,400 + 16,000 = 35,600.
+    expect(valued.positions).toHaveLength(4);
+    expect(valued.totalMinorUnits).toBe(35_600 * 100);
+  });
+
+  it("re-importing the same statement changes nothing and writes no revision", async () => {
+    const first = await importPortfolioSnapshot(db, multiFolio(), MF);
+    expect(first.positionsCreated).toBe(5);
+
+    const second = await importPortfolioSnapshot(db, multiFolio(), MF);
+
+    expect(second.isRepeatUpload).toBe(true);
+    expect(second.positionsCreated).toBe(0);
+    expect(second.positionsUnchanged).toBe(5);
+    expect(second.positionsRevised).toBe(0);
+
+    // No duplicated holdings, no duplicated prices, no spurious revision.
+    expect(await db.positionSnapshot.count()).toBe(5);
+    expect(await db.valuation.count()).toBe(4);
+    expect(await db.revision.count()).toBe(0);
+    expect(await db.sourceDocument.count()).toBe(1);
+  });
+
+  it("still refuses a layout that states neither a date nor an asset class", async () => {
+    // The guard is unchanged: this file states its own date, so withholding
+    // the asset class alone must still be refused.
+    await expect(
+      importPortfolioSnapshot(db, multiFolio(), {}),
+    ).rejects.toThrow(/states neither an as-of date nor an asset class/);
   });
 });

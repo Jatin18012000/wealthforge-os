@@ -30,6 +30,29 @@ export const COLUMN_ALIASES = {
   price: ["price", "ltp", "nav", "last price", "closing price", "market price", "current price"],
   averageCost: ["avg cost", "avg. cost", "average price", "avg price", "buy price", "cost price"],
   totalCost: ["cost value", "invested", "invested value", "total cost", "investment"],
+  /**
+   * The holding's TOTAL market value at the statement date, as opposed to
+   * `price`, which is per unit. Fund-house mutual-fund statements report
+   * this instead of a NAV — they state what the holding is worth, not what
+   * one unit costs — so without it such a statement yields no price at all
+   * and every holding is excluded as unvalued.
+   */
+  totalValue: [
+    "current value",
+    "cur. val",
+    "cur value",
+    "market value",
+    "present value",
+    "current market value",
+    "value",
+  ],
+  /**
+   * Folio number. Part of a mutual-fund holding's IDENTITY, not decoration:
+   * one scheme held under three folios is three distinct holdings, and
+   * keying instruments on scheme name alone silently merges them into one
+   * (and then flags them as duplicate rows of each other).
+   */
+  folio: ["folio no.", "folio no", "folio number", "folio"],
 } as const;
 
 const UNIT_BY_ASSET_CLASS: Record<PortfolioAssetClass, string> = {
@@ -86,6 +109,8 @@ export function extractSnapshot(
   const priceColumn = findColumn(file.headers, COLUMN_ALIASES.price);
   const averageCostColumn = findColumn(file.headers, COLUMN_ALIASES.averageCost);
   const totalCostColumn = findColumn(file.headers, COLUMN_ALIASES.totalCost);
+  const totalValueColumn = findColumn(file.headers, COLUMN_ALIASES.totalValue);
+  const folioColumn = findColumn(file.headers, COLUMN_ALIASES.folio);
 
   // A holding needs something to identify it and something to count. Either
   // an identifier or a name will do for identity; quantity is mandatory.
@@ -113,8 +138,19 @@ export function extractSnapshot(
 
     const rawIdentifier = identifierColumn ? (row.cells[identifierColumn] ?? "") : "";
     const rawName = nameColumn ? (row.cells[nameColumn] ?? "") : "";
-    const identifier = rawIdentifier.trim() || rawName.trim();
+    const baseIdentifier = rawIdentifier.trim() || rawName.trim();
     const displayName = rawName.trim() || rawIdentifier.trim();
+
+    // A folio makes the holding distinct: the same scheme held under three
+    // folios is three holdings, each with its own units and cost, and they
+    // must not collapse into one instrument (nor be mistaken for duplicate
+    // rows of each other). Appended to the identifier rather than stored
+    // separately, because `identifier` is already this layer's free-form
+    // natural key (ISIN, scheme code, symbol, or name) and instruments are
+    // resolved by it — see resolveInstrument in ./importSnapshot.ts.
+    const folio = folioColumn ? (row.cells[folioColumn] ?? "").trim() : "";
+    const identifier =
+      baseIdentifier !== "" && folio !== "" ? `${baseIdentifier} · ${folio}` : baseIdentifier;
 
     if (identifier === "") validationIssues.push("holding has neither an identifier nor a name");
 
@@ -126,9 +162,25 @@ export function extractSnapshot(
       validationIssues.push(`negative quantity: ${quantity}`);
     }
 
-    const priceMinorUnits = priceColumn
+    const reportedPrice = priceColumn
       ? readOptionalAmount(row.cells[priceColumn], "price", validationIssues)
       : null;
+
+    // A statement that reports the holding's total value but no per-unit
+    // price still states, unambiguously, what the holding was worth at its
+    // own date — so it is valued from that, not left unpriced awaiting a
+    // market lookup it never needed. The per-unit figure is DERIVED from the
+    // statement's own two numbers (value ÷ units), never invented and never
+    // fetched: it is the arithmetic the statement itself implies. A reported
+    // per-unit price always wins, since that is the source's own figure
+    // rather than one derived from it.
+    const totalValueMinorUnits = totalValueColumn
+      ? readOptionalAmount(row.cells[totalValueColumn], "current value", validationIssues)
+      : null;
+
+    const priceMinorUnits =
+      reportedPrice ??
+      deriveUnitPrice(totalValueMinorUnits, quantity, validationIssues);
 
     const costBasisMinorUnits = resolveCostBasis({
       totalCost: totalCostColumn ? row.cells[totalCostColumn] : undefined,
@@ -178,6 +230,36 @@ function readOptionalAmount(
     return null;
   }
   return minorUnits;
+}
+
+/**
+ * Per-unit price implied by a reported total value and unit count.
+ *
+ * The mirror image of `resolveCostBasis`, which derives a total from a
+ * per-unit figure; this derives a per-unit figure from a total. Used only
+ * when the statement reports no price of its own — a fund-house mutual-fund
+ * statement reports "Current Value" per holding rather than a NAV per unit,
+ * and valuation is `price × quantity` throughout the engine
+ * (`src/domain/portfolio.ts`), so a per-unit figure is what it needs.
+ *
+ * Returns null rather than 0 when either input is missing or the unit count
+ * is not positive: dividing by zero units yields no meaningful price, and a
+ * zero price would silently value a real holding at nothing — the exact
+ * failure `valuePosition`'s insufficient-data path exists to prevent.
+ */
+function deriveUnitPrice(
+  totalValueMinorUnits: number | null,
+  quantity: number | null,
+  validationIssues: string[],
+): number | null {
+  if (totalValueMinorUnits === null || quantity === null) return null;
+  if (quantity <= 0) {
+    validationIssues.push(
+      `cannot derive a unit price from a total value with ${quantity} units`,
+    );
+    return null;
+  }
+  return Math.round(totalValueMinorUnits / quantity);
 }
 
 /**

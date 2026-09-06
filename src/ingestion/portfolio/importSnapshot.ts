@@ -12,6 +12,13 @@ import type {
   PortfolioImportAudit,
 } from "./types";
 
+/**
+ * Tolerance for comparing two unit counts. Shared by the observed-change
+ * detector and the unchanged-position check so both answer "is this the
+ * same holding?" identically.
+ */
+const QUANTITY_EPSILON = 1e-9;
+
 export interface ImportSnapshotOptions extends Partial<NormalizeOptions> {
   /**
    * Optional when the file states its own as-of date (a Zerodha statement
@@ -334,7 +341,7 @@ async function detectObservedChange(
     transactionCount: transactions.length,
     reconciled:
       recordedTransactionQuantity !== null &&
-      Math.abs(recordedTransactionQuantity - quantityDelta) < 1e-9,
+      Math.abs(recordedTransactionQuantity - quantityDelta) < QUANTITY_EPSILON,
   };
 }
 
@@ -381,8 +388,15 @@ async function persistPosition(
     return "created";
   }
 
+  // Quantity is a float, so it is compared with the same tolerance
+  // detectObservedChange above already uses rather than with `===`. A unit
+  // count like 227.70799999999997 does not survive a database round trip
+  // bit-for-bit, and an exact comparison would therefore read every
+  // re-import of an UNCHANGED holding as a correction — superseding the
+  // prior row and writing a revision each time. The tolerance is far below
+  // any real change in units.
   const unchanged =
-    sameDate.quantity === (position.quantity ?? 0) &&
+    Math.abs(sameDate.quantity - (position.quantity ?? 0)) < QUANTITY_EPSILON &&
     sameDate.costBasisMinorUnits === position.costBasisMinorUnits &&
     sameDate.trustState === position.trustState;
 
