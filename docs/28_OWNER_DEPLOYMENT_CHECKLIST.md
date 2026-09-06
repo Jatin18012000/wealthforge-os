@@ -46,10 +46,9 @@ section — do not work around it silently.
 ```bash
 git clone https://github.com/Jatin18012000/wealthforge-os.git
 cd wealthforge-os
-git checkout claude/wealthforge-os-foundation-5rfjdn
 ```
-(Substitute `main` once the branch has been merged there, if you prefer
-to run off the default branch instead.)
+`main` is the default branch and is current (merged 2026-09-06) — no
+`git checkout` needed.
 
 - [ ] Clone completes with no error.
 - [ ] `git status` reports a clean working tree with no untracked files
