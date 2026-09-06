@@ -257,16 +257,32 @@ export async function loadInsurancePolicies(
 }
 
 /**
- * The latest position snapshot per instrument at or before `asOf`.
+ * The latest EFFECTIVE position snapshot per instrument at or before `asOf`.
  * A later snapshot is never used to describe an earlier date.
+ *
+ * Superseded rows are excluded, as in `loadCostBasesAsOf` and
+ * `loadSnapshotDatesAsOf` below. Without that filter a correction was
+ * actively harmful rather than merely untidy: the superseded row and its
+ * replacement share an as-of date, so ordering by date alone left the tie
+ * to the database, and the older row — written first — tended to win. The
+ * holding then reported its pre-correction quantity AND carried
+ * `trustState: "superseded"`, which `isTrusted` rejects, so a corrected
+ * holding vanished from the portfolio altogether instead of showing its
+ * corrected value.
+ *
+ * `createdAt` breaks any remaining tie deterministically. Two effective
+ * rows can still share a date when one file lists the same holding twice
+ * (persistPosition keeps both, flagged for review, rather than silently
+ * dropping a lot) — picking the later-written one consistently beats
+ * leaving it to row order.
  */
 export async function loadPositionsAsOf(
   db: PrismaClient,
   asOf: Date,
 ): Promise<PositionInput[]> {
   const rows = await db.positionSnapshot.findMany({
-    where: { asOfDate: { lte: asOf } },
-    orderBy: { asOfDate: "desc" },
+    where: { asOfDate: { lte: asOf }, supersededById: null },
+    orderBy: [{ asOfDate: "desc" }, { createdAt: "desc" }],
     include: { instrument: true },
   });
 

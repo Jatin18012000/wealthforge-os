@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { createTestDb } from "../setup/testDb";
+import { loadPositionsAsOf } from "../../src/data/loaders";
 
 /**
  * docs/08_DATA_TRUST_MODEL.md / CLAUDE.md §5: no silent overwrites. A
@@ -98,5 +99,62 @@ describe("Revision non-destructive update", () => {
 
     const after = await testDb.db.planRecord.count({ where: { periodMonth: "2026-06" } });
     expect(after).toBe(before + 1);
+  });
+});
+
+describe("a superseded snapshot never shadows its replacement", () => {
+  const testDb = createTestDb();
+  const db = testDb.db;
+  const SEP_7 = new Date("2026-09-07T00:00:00Z");
+
+  afterAll(async () => {
+    await testDb.cleanup();
+  });
+
+  it("loads the corrected row, not the superseded one it replaced", async () => {
+    const instrument = await db.instrument.create({
+      data: { kind: "equity", identifier: "SUPERSEDE-TEST", displayName: "Test Co" },
+    });
+
+    // Written in the order a correction actually happens: the original
+    // first, its replacement second, both dated the same day. Ordering by
+    // date alone therefore leaves the tie to the database, and the older
+    // row tends to win — which used to hide the holding entirely, since a
+    // superseded row is not trusted and is dropped from every total.
+    const original = await db.positionSnapshot.create({
+      data: {
+        instrumentId: instrument.id,
+        asOfDate: SEP_7,
+        quantity: 100,
+        unit: "shares",
+        trustState: "validated",
+      },
+    });
+    const replacement = await db.positionSnapshot.create({
+      data: {
+        instrumentId: instrument.id,
+        asOfDate: SEP_7,
+        quantity: 200,
+        unit: "shares",
+        trustState: "validated",
+      },
+    });
+    await db.positionSnapshot.update({
+      where: { id: original.id },
+      data: { supersededById: replacement.id, trustState: "superseded" },
+    });
+
+    const loaded = await loadPositionsAsOf(db, SEP_7);
+    const position = loaded.filter((p) => p.instrumentId === instrument.id);
+
+    expect(position).toHaveLength(1);
+    expect(position[0]?.id).toBe(replacement.id);
+    expect(position[0]?.quantity).toBe(200);
+    // Trusted, so it still counts toward the portfolio rather than being
+    // excluded as superseded.
+    expect(position[0]?.trustState).toBe("validated");
+
+    // The superseded row is retained on the record, never deleted.
+    expect(await db.positionSnapshot.count({ where: { instrumentId: instrument.id } })).toBe(2);
   });
 });
