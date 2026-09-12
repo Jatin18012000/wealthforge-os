@@ -113,6 +113,7 @@ const INVESTMENT_PLAN_ADHERENCE_METRIC: MetricDefinition = {
 // --- Shared types -----------------------------------------------------
 
 export interface XRayHoldingRow {
+  readonly positionId: string;
   readonly instrumentLabel: string;
   readonly assetClass: string;
   readonly quantity: number;
@@ -241,6 +242,7 @@ function buildPortfolioXRay(portfolio: PortfolioView, asOf: Date): Insight<Portf
 
   const totalMinorUnits = portfolio.valuation.value.totalMinorUnits;
   const holdings: XRayHoldingRow[] = portfolio.holdings.map((h: HoldingRow) => ({
+    positionId: h.positionId,
     instrumentLabel: h.instrumentLabel,
     assetClass: h.assetClass,
     quantity: h.quantity,

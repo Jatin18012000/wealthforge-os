@@ -395,7 +395,7 @@ export default async function CommandCenterPage({
                   </thead>
                   <tbody>
                     {xray.holdings.map((h) => (
-                      <tr key={h.instrumentLabel}>
+                      <tr key={h.positionId}>
                         <td>{h.instrumentLabel}</td>
                         <td>{h.assetClass}</td>
                         <td className="num">{formatMoney(h.valueMinorUnits)}</td>

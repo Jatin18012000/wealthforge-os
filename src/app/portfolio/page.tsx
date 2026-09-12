@@ -147,7 +147,7 @@ export default async function PortfolioPage() {
                 </thead>
                 <tbody>
                   {view.holdings.map((holding) => (
-                    <tr key={holding.instrumentLabel}>
+                    <tr key={holding.positionId}>
                       <td className="label-cell">{holding.instrumentLabel}</td>
                       <td>{assetClassLabel(holding.assetClass)}</td>
                       <td className="num">{formatQuantity(holding.quantity)}</td>

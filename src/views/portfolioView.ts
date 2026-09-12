@@ -14,6 +14,7 @@ import {
 } from "../domain";
 
 export interface HoldingRow {
+  readonly positionId: string;
   readonly instrumentLabel: string;
   readonly assetClass: string;
   readonly quantity: number;
@@ -75,6 +76,7 @@ export async function getPortfolioView(
   const costBases = await loadCostBasesAsOf(db, asOf);
 
   const holdings: HoldingRow[] = valuation.value.positions.map((position) => ({
+    positionId: position.positionId,
     instrumentLabel: position.instrumentLabel,
     assetClass: position.assetClass,
     quantity: position.quantity,
