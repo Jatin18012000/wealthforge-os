@@ -332,7 +332,11 @@ export default async function DataCenterPage({
             Give the total price and what you paid upfront — the system finances the rest:
             principal = price − upfront, and the monthly EMI is calculated from the
             principal, the interest rate, and the number of months between the start and
-            end date (0% interest is a valid, flat EMI).
+            end date (0% interest is a valid, flat EMI). If you already know the real
+            monthly amount (e.g. from a bank statement), enter it directly instead of
+            letting it be computed. If this loan was already running before you started
+            using this app, say how many EMIs you&apos;ve paid so far — that many payments
+            are recorded immediately, dated monthly from the start date.
             {prefillLinkLabel !== "" && (
               <>
                 {" "}
@@ -425,6 +429,30 @@ export default async function DataCenterPage({
                 inputMode="decimal"
                 placeholder="e.g. 0 for a no-cost EMI"
                 aria-label="Annual interest rate percent"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">
+                Monthly EMI amount (₹, optional override)
+              </span>
+              <input
+                className="field__input"
+                type="text"
+                name="monthlyEmiAmount"
+                inputMode="decimal"
+                placeholder="Leave blank to compute from price, rate & tenure"
+                aria-label="Known monthly EMI amount"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">EMIs already paid (optional)</span>
+              <input
+                className="field__input"
+                type="text"
+                name="emisAlreadyPaid"
+                inputMode="numeric"
+                placeholder="e.g. 18, if this loan predates this app"
+                aria-label="Number of EMIs already paid"
               />
             </label>
             <button type="submit" className="button button--primary">

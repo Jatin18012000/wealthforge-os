@@ -5,7 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { backupAfterImport, exportFullBackup, restoreFullBackup } from "../../backup";
 import { BACKUP_DIR, SAFETY_BACKUP_DIR } from "../../data/dataCenterStore";
-import { computeEmiAmount, computeTenureMonthsBetween } from "../../domain";
+import {
+  addMonthsClamped,
+  computeEmiAmount,
+  computeTenureMonthsBetween,
+} from "../../domain";
 import { hashBuffer, importBudgetWorkbook, storeUpload } from "../../ingestion";
 import { importPortfolioSnapshot } from "../../ingestion/portfolio";
 import type { PortfolioAssetClass } from "../../ingestion/portfolio/types";
@@ -342,11 +346,39 @@ export async function createLiabilityAction(form: FormData): Promise<void> {
 
   const principalMinorUnits = totalPriceMinorUnits - amountPaidUpfrontMinorUnits;
   const tenureMonths = computeTenureMonthsBetween(startDate, endDate);
-  const emiAmountMinorUnits = computeEmiAmount(
-    principalMinorUnits,
-    interestRateBps,
-    tenureMonths,
-  );
+
+  // A monthly amount typed in directly — e.g. copied off a bank
+  // statement — is trusted over the computed one: it's the actual figure,
+  // while the computed one is only ever an estimate from price/rate/tenure.
+  const monthlyEmiRaw = text(form, "monthlyEmiAmount");
+  let emiAmountMinorUnits: number;
+  if (monthlyEmiRaw.trim() !== "") {
+    emiAmountMinorUnits = requiredMinorUnits(monthlyEmiRaw, "Monthly EMI amount");
+    if (emiAmountMinorUnits <= 0) fail("Monthly EMI amount must be greater than zero.");
+  } else {
+    emiAmountMinorUnits = computeEmiAmount(
+      principalMinorUnits,
+      interestRateBps,
+      tenureMonths,
+    );
+  }
+
+  // Installments already paid before this liability was registered — e.g. a
+  // loan running long before it was ever imported here. Never inferred from
+  // dates: only counted from what the user states.
+  const emisAlreadyPaidRaw = text(form, "emisAlreadyPaid").trim();
+  let emisAlreadyPaid = 0;
+  if (emisAlreadyPaidRaw !== "") {
+    emisAlreadyPaid = Number(emisAlreadyPaidRaw);
+    if (!Number.isInteger(emisAlreadyPaid) || emisAlreadyPaid < 0) {
+      fail("EMIs already paid must be a whole number, zero or more.");
+    }
+    if (emisAlreadyPaid > tenureMonths) {
+      fail(
+        `EMIs already paid (${emisAlreadyPaid}) cannot exceed the ${tenureMonths}-month tenure.`,
+      );
+    }
+  }
 
   const liability = await db.liability.create({
     data: {
@@ -360,6 +392,18 @@ export async function createLiabilityAction(form: FormData): Promise<void> {
       emiAmountMinorUnits,
     },
   });
+
+  if (emisAlreadyPaid > 0) {
+    await db.activity.createMany({
+      data: Array.from({ length: emisAlreadyPaid }, (_, i) => ({
+        kind: "emi_payment",
+        liabilityId: liability.id,
+        amountMinorUnits: emiAmountMinorUnits,
+        occurredOn: addMonthsClamped(startDate, i),
+        trustState: "verified",
+      })),
+    });
+  }
 
   // Set only when this liability was registered from a detected budget-EMI
   // label (see "Unlinked EMIs" on this screen) — links the label to the new
@@ -375,7 +419,9 @@ export async function createLiabilityAction(form: FormData): Promise<void> {
   revalidatePath("/");
   redirect(
     dataCenterUrl({
-      recordCreated: `Liability "${name}" — ${(emiAmountMinorUnits / 100).toFixed(2)}/month for ${tenureMonths} months`,
+      recordCreated: `Liability "${name}" — ${(emiAmountMinorUnits / 100).toFixed(2)}/month for ${tenureMonths} months${
+        emisAlreadyPaid > 0 ? ` (${emisAlreadyPaid} already-paid EMI(s) recorded)` : ""
+      }`,
     }),
   );
 }
