@@ -1,7 +1,12 @@
 import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { loadEffectivePlanRecords } from "../../src/data/loaders";
-import { expectOk, roundHalfToEven, summarizeMonth, sumMinorUnits } from "../../src/domain";
+import {
+  expectOk,
+  roundHalfToEven,
+  summarizeMonth,
+  sumMinorUnits,
+} from "../../src/domain";
 import { importBudgetWorkbook } from "../../src/ingestion";
 import { importPortfolioSnapshot } from "../../src/ingestion/portfolio";
 import { createTestDb } from "../setup/testDb";
@@ -59,7 +64,9 @@ describe("reference budget workbook layout", () => {
     // retained verbatim in the sheet snapshot's raw JSON for provenance.
     expect(byLabel.get("mobile recharge")?.labelRaw).toBe("Mobile recharge");
 
-    const snapshot = await db.sheetSnapshot.findFirstOrThrow({ where: { sheetName: "August" } });
+    const snapshot = await db.sheetSnapshot.findFirstOrThrow({
+      where: { sheetName: "August" },
+    });
     expect(snapshot.rawDataJson).toContain("Mobile recharge");
   });
 
@@ -79,7 +86,9 @@ describe("reference budget workbook layout", () => {
     // The decisive check: the sum of imported line items must equal the
     // workbook's own totals, not some inflated multiple of them.
     const income = sumMinorUnits(
-      records.filter((r) => r.category === "income").map((r) => r.amountMinorUnits as number),
+      records
+        .filter((r) => r.category === "income")
+        .map((r) => r.amountMinorUnits as number),
     );
     expect(income).toBe(67_250 * 100);
   });
@@ -90,7 +99,9 @@ describe("reference budget workbook layout", () => {
       where: { periodMonth: "2026-08", supersededById: null },
     });
 
-    const emis = records.filter((r) => r.category === "emi").map((r) => r.labelNormalized);
+    const emis = records
+      .filter((r) => r.category === "emi")
+      .map((r) => r.labelNormalized);
     expect(emis).toContain("home emi");
     expect(emis).toContain("tablet emi");
     // "Smart watch" carries an EMI end date but no "emi" in its label — the
@@ -98,9 +109,32 @@ describe("reference budget workbook layout", () => {
     expect(emis).toContain("smart watch");
 
     // Ordinary expenses stay expenses.
-    const expenses = records.filter((r) => r.category === "expense").map((r) => r.labelNormalized);
+    const expenses = records
+      .filter((r) => r.category === "expense")
+      .map((r) => r.labelNormalized);
     expect(expenses).toContain("card a");
     expect(expenses).toContain("daily commute and exp");
+  });
+
+  it("captures the EMI end date onto the plan record instead of discarding it", async () => {
+    await importBudgetWorkbook(db, BUDGET, { defaultYear: 2026 });
+    const records = await db.planRecord.findMany({
+      where: { periodMonth: "2026-08", supersededById: null, category: "emi" },
+    });
+    const byLabel = new Map(records.map((r) => [r.labelNormalized, r]));
+
+    for (const label of ["home emi", "tablet emi", "smart watch"]) {
+      const record = byLabel.get(label);
+      expect(
+        record?.emiEndDate,
+        `expected "${label}" to carry an EMI end date`,
+      ).not.toBeNull();
+    }
+    // Non-EMI rows never carry one.
+    const nonEmi = await db.planRecord.findMany({
+      where: { periodMonth: "2026-08", supersededById: null, category: { not: "emi" } },
+    });
+    expect(nonEmi.every((r) => r.emiEndDate === null)).toBe(true);
   });
 
   it("reproduces the workbook's own derived figures from imported line items", async () => {
@@ -205,7 +239,9 @@ describe("reference Zerodha holdings layout", () => {
     // Silently trusting either would misdate every valuation built on this
     // snapshot, so the disagreement is fatal (D-011).
     await expect(
-      importPortfolioSnapshot(db, ZERODHA_AUG_03, { asOf: new Date("2026-09-01T00:00:00Z") }),
+      importPortfolioSnapshot(db, ZERODHA_AUG_03, {
+        asOf: new Date("2026-09-01T00:00:00Z"),
+      }),
     ).rejects.toThrow(/dated 2026-08-03 but 2026-09-01 was supplied/);
 
     expect(await db.positionSnapshot.count()).toBe(0);
@@ -226,7 +262,9 @@ describe("reference Zerodha holdings layout", () => {
     // A trading symbol can be renamed when a company rebrands — one holding
     // in the real statements has — but its ISIN does not, so ISIN is the
     // identity that keeps an instrument's history intact.
-    const gold = await db.instrument.findFirstOrThrow({ where: { identifier: "INF900A01011" } });
+    const gold = await db.instrument.findFirstOrThrow({
+      where: { identifier: "INF900A01011" },
+    });
     expect(gold.displayName).toBe("GOLDETF-E");
   });
 
@@ -248,7 +286,9 @@ describe("reference Zerodha holdings layout", () => {
   it("records cost basis and a dated price from the statement's own columns", async () => {
     await importPortfolioSnapshot(db, ZERODHA_AUG_03, {});
 
-    const gold = await db.instrument.findFirstOrThrow({ where: { identifier: "INF900A01011" } });
+    const gold = await db.instrument.findFirstOrThrow({
+      where: { identifier: "INF900A01011" },
+    });
     const position = await db.positionSnapshot.findFirstOrThrow({
       where: { instrumentId: gold.id },
     });
@@ -260,7 +300,9 @@ describe("reference Zerodha holdings layout", () => {
     expect(position.costBasisMinorUnits).toBe(roundHalfToEven(90 * 102.3417 * 100));
     expect(position.costBasisMinorUnits).not.toBe(roundHalfToEven(102.3417 * 100) * 90);
 
-    const valuation = await db.valuation.findFirstOrThrow({ where: { instrumentId: gold.id } });
+    const valuation = await db.valuation.findFirstOrThrow({
+      where: { instrumentId: gold.id },
+    });
     // Previous Closing Price, explicitly not a live quote.
     expect(valuation.priceMinorUnits).toBe(11_140);
   });
@@ -290,7 +332,10 @@ describe("reference Zerodha holdings layout", () => {
     // bases must reproduce it — this is the check that caught the rounding
     // bug where per-unit prices were truncated to paise before scaling.
     const positions = await db.positionSnapshot.findMany();
-    const summed = positions.reduce((total, p) => total + (p.costBasisMinorUnits ?? 0), 0);
+    const summed = positions.reduce(
+      (total, p) => total + (p.costBasisMinorUnits ?? 0),
+      0,
+    );
 
     const holdings: Array<{ qty: number; avg: number }> = [
       { qty: 3, avg: 612.4 },

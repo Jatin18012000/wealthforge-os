@@ -15,6 +15,7 @@ import {
   deleteInsurancePolicyAction,
   deleteLiabilityAction,
   exportBackupAction,
+  linkEmiLabelAction,
   restoreBackupAction,
   uploadBudgetWorkbookAction,
   uploadPortfolioSnapshotAction,
@@ -105,6 +106,14 @@ export default async function DataCenterPage({
   const conflictBackup = one("conflictBackup");
   const currentYear = new Date().getUTCFullYear();
 
+  // Pre-fills the "Register a new EMI / liability" form when arriving from
+  // an "Unlinked EMIs" row below — the name and end date are already known
+  // from the budget import, so only the price/rate the workbook never
+  // carries needs typing.
+  const prefillName = one("prefillName");
+  const prefillEndDate = one("prefillEndDate");
+  const prefillLinkLabel = one("prefillLinkLabel");
+
   return (
     <>
       <div className="page-header">
@@ -156,14 +165,14 @@ export default async function DataCenterPage({
         )}
         {one("recordClosed") !== "" && (
           <p className="alert">
-            <span className="alert__title">Closed.</span> &quot;{one("recordClosed")}&quot;
-            is kept on the record but no longer counted as active.
+            <span className="alert__title">Closed.</span> &quot;{one("recordClosed")}
+            &quot; is kept on the record but no longer counted as active.
           </p>
         )}
         {one("recordDeleted") !== "" && (
           <p className="alert">
-            <span className="alert__title">Deleted.</span> &quot;{one("recordDeleted")}&quot;
-            had no recorded history, so it was removed outright.
+            <span className="alert__title">Deleted.</span> &quot;{one("recordDeleted")}
+            &quot; had no recorded history, so it was removed outright.
           </p>
         )}
         {conflictBackup !== "" && (
@@ -266,8 +275,8 @@ export default async function DataCenterPage({
         <Card title="Register a new goal">
           <p className="note" style={{ marginBottom: "0.6rem" }}>
             Once registered, its balance is tracked the same way every goal&apos;s is — as
-            a running sum of contributions, never a separately-stored total. Top it up from
-            the Goals screen.
+            a running sum of contributions, never a separately-stored total. Top it up
+            from the Goals screen.
           </p>
           <form action={createGoalAction} className="entry-form">
             <label className="field">
@@ -305,7 +314,12 @@ export default async function DataCenterPage({
             </label>
             <label className="field">
               <span className="field__label">Target date (optional)</span>
-              <input className="field__input" type="date" name="targetDate" aria-label="Goal target date" />
+              <input
+                className="field__input"
+                type="date"
+                name="targetDate"
+                aria-label="Goal target date"
+              />
             </label>
             <button type="submit" className="button button--primary">
               Register goal
@@ -314,19 +328,35 @@ export default async function DataCenterPage({
         </Card>
 
         <Card title="Register a new EMI / liability">
-          <p className="note" style={{ marginBottom: "0.6rem" }}>
+          <p className="note" style={{ marginBottom: "0.6rem" }} id="register-liability">
             Give the total price and what you paid upfront — the system finances the rest:
             principal = price − upfront, and the monthly EMI is calculated from the
             principal, the interest rate, and the number of months between the start and
             end date (0% interest is a valid, flat EMI).
+            {prefillLinkLabel !== "" && (
+              <>
+                {" "}
+                Name and end date below were filled in from your budget import — once
+                saved, this liability will be linked to that EMI label and every month
+                already imported under it will be recorded as a payment.
+              </>
+            )}
           </p>
           <form action={createLiabilityAction} className="entry-form">
+            {prefillLinkLabel !== "" && (
+              <input
+                type="hidden"
+                name="linkEmiLabelNormalized"
+                value={prefillLinkLabel}
+              />
+            )}
             <label className="field">
               <span className="field__label">Name</span>
               <input
                 className="field__input"
                 type="text"
                 name="name"
+                defaultValue={prefillName}
                 placeholder="e.g. New phone EMI"
                 required
                 aria-label="Liability name"
@@ -367,11 +397,24 @@ export default async function DataCenterPage({
             </label>
             <label className="field">
               <span className="field__label">Start date</span>
-              <input className="field__input" type="date" name="startDate" required aria-label="EMI start date" />
+              <input
+                className="field__input"
+                type="date"
+                name="startDate"
+                required
+                aria-label="EMI start date"
+              />
             </label>
             <label className="field">
               <span className="field__label">End date</span>
-              <input className="field__input" type="date" name="endDate" required aria-label="EMI end date" />
+              <input
+                className="field__input"
+                type="date"
+                name="endDate"
+                defaultValue={prefillEndDate}
+                required
+                aria-label="EMI end date"
+              />
             </label>
             <label className="field">
               <span className="field__label">Annual interest rate (%)</span>
@@ -436,7 +479,13 @@ export default async function DataCenterPage({
             </label>
             <label className="field">
               <span className="field__label">Premium (₹, optional)</span>
-              <input className="field__input" type="text" name="premium" inputMode="decimal" aria-label="Premium" />
+              <input
+                className="field__input"
+                type="text"
+                name="premium"
+                inputMode="decimal"
+                aria-label="Premium"
+              />
             </label>
             <label className="field">
               <span className="field__label">Premium frequency</span>
@@ -490,14 +539,20 @@ export default async function DataCenterPage({
                       <td>{goal.lifecycleState.replace(/_/g, " ")}</td>
                       <td>
                         {goal.lifecycleState !== "cancelled" && (
-                          <form action={closeGoalAction} style={{ display: "inline-block", marginRight: "0.4rem" }}>
+                          <form
+                            action={closeGoalAction}
+                            style={{ display: "inline-block", marginRight: "0.4rem" }}
+                          >
                             <input type="hidden" name="goalId" value={goal.id} />
                             <button type="submit" className="button button--quiet">
                               Close
                             </button>
                           </form>
                         )}
-                        <form action={deleteGoalAction} style={{ display: "inline-block" }}>
+                        <form
+                          action={deleteGoalAction}
+                          style={{ display: "inline-block" }}
+                        >
                           <input type="hidden" name="goalId" value={goal.id} />
                           <button type="submit" className="button button--quiet">
                             Delete
@@ -531,26 +586,134 @@ export default async function DataCenterPage({
                   {liabilities.map((liability) => (
                     <tr key={liability.id}>
                       <td>{liability.name}</td>
-                      <td className="num">{formatMoney(liability.emiAmountMinorUnits)}/mo</td>
-                      <td>{liability.closedAt === null ? "active" : `closed ${formatDate(liability.closedAt)}`}</td>
+                      <td className="num">
+                        {formatMoney(liability.emiAmountMinorUnits)}/mo
+                      </td>
+                      <td>
+                        {liability.closedAt === null
+                          ? "active"
+                          : `closed ${formatDate(liability.closedAt)}`}
+                      </td>
                       <td>
                         {liability.closedAt === null && (
                           <form
                             action={closeLiabilityAction}
                             style={{ display: "inline-block", marginRight: "0.4rem" }}
                           >
-                            <input type="hidden" name="liabilityId" value={liability.id} />
+                            <input
+                              type="hidden"
+                              name="liabilityId"
+                              value={liability.id}
+                            />
                             <button type="submit" className="button button--quiet">
                               Close
                             </button>
                           </form>
                         )}
-                        <form action={deleteLiabilityAction} style={{ display: "inline-block" }}>
+                        <form
+                          action={deleteLiabilityAction}
+                          style={{ display: "inline-block" }}
+                        >
                           <input type="hidden" name="liabilityId" value={liability.id} />
                           <button type="submit" className="button button--quiet">
                             Delete
                           </button>
                         </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h3 className="card__title">Unlinked EMIs from your budget imports</h3>
+          {view.unlinkedEmiLabels.length === 0 ? (
+            <EmptyState>
+              Every EMI label your budget imports have carried is either linked to a
+              liability above, or none has been imported yet.
+            </EmptyState>
+          ) : (
+            <div className="table-scroll" style={{ marginBottom: "1rem" }}>
+              <p className="note" style={{ marginBottom: "0.6rem" }}>
+                These labels showed up as EMIs in an imported budget sheet but are not
+                linked to any liability yet, so they appear in the Budget screen&apos;s
+                Plan vs Reality but not here or in net worth. Link each one once — either
+                by registering it as a new liability (its name and end date come from the
+                import) or by pointing it at a liability you already created.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Label</th>
+                    <th scope="col" className="num">
+                      Latest amount
+                    </th>
+                    <th scope="col">EMI end date</th>
+                    <th scope="col" className="num">
+                      Months imported
+                    </th>
+                    <th scope="col">Link</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {view.unlinkedEmiLabels.map((label) => (
+                    <tr key={label.labelNormalized}>
+                      <td>{label.labelRaw}</td>
+                      <td className="num">
+                        {label.latestAmountMinorUnits === null
+                          ? "—"
+                          : `${formatMoney(label.latestAmountMinorUnits)}/mo`}
+                      </td>
+                      <td>
+                        {label.latestEmiEndDate === null
+                          ? "—"
+                          : formatDate(label.latestEmiEndDate)}
+                      </td>
+                      <td className="num">{label.occurrences}</td>
+                      <td>
+                        <a
+                          href={`?prefillName=${encodeURIComponent(label.labelRaw)}&prefillEndDate=${
+                            label.latestEmiEndDate === null
+                              ? ""
+                              : label.latestEmiEndDate.toISOString().slice(0, 10)
+                          }&prefillLinkLabel=${encodeURIComponent(label.labelNormalized)}#register-liability`}
+                          className="button button--quiet"
+                          style={{ display: "inline-block", marginRight: "0.4rem" }}
+                        >
+                          Create liability from this
+                        </a>
+                        {liabilities.filter((liability) => liability.closedAt === null)
+                          .length > 0 && (
+                          <form
+                            action={linkEmiLabelAction}
+                            style={{ display: "inline-block" }}
+                          >
+                            <input
+                              type="hidden"
+                              name="labelNormalized"
+                              value={label.labelNormalized}
+                            />
+                            <select
+                              className="field__select"
+                              name="liabilityId"
+                              aria-label="Link to existing liability"
+                              required
+                            >
+                              <option value="">Link to existing…</option>
+                              {liabilities
+                                .filter((liability) => liability.closedAt === null)
+                                .map((liability) => (
+                                  <option key={liability.id} value={liability.id}>
+                                    {liability.name}
+                                  </option>
+                                ))}
+                            </select>
+                            <button type="submit" className="button button--quiet">
+                              Link
+                            </button>
+                          </form>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -591,7 +754,10 @@ export default async function DataCenterPage({
                             </button>
                           </form>
                         )}
-                        <form action={deleteInsurancePolicyAction} style={{ display: "inline-block" }}>
+                        <form
+                          action={deleteInsurancePolicyAction}
+                          style={{ display: "inline-block" }}
+                        >
                           <input type="hidden" name="policyId" value={policy.id} />
                           <button type="submit" className="button button--quiet">
                             Delete

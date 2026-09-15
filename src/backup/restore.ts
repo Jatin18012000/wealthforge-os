@@ -2,7 +2,11 @@ import { readFile } from "node:fs/promises";
 import type { PrismaClient } from "@prisma/client";
 import { exportFullBackup } from "./export";
 import { buildBackupPayload, getNewestTimestamp } from "./payload";
-import { TABLE_ORDER_PARENTS_FIRST, type BackupPayload, type RestoreResult } from "./types";
+import {
+  TABLE_ORDER_PARENTS_FIRST,
+  type BackupPayload,
+  type RestoreResult,
+} from "./types";
 
 /**
  * Restore safety sequence (docs/16_DATA_MIGRATION.md, mandatory, no
@@ -25,7 +29,9 @@ export async function restoreFullBackup(
   const raw = await readFile(backupFilePath, "utf-8");
   const backupPayload = JSON.parse(raw) as BackupPayload;
   if (backupPayload.formatVersion !== 1) {
-    throw new Error(`Unsupported backup format version: ${String(backupPayload.formatVersion)}`);
+    throw new Error(
+      `Unsupported backup format version: ${String(backupPayload.formatVersion)}`,
+    );
   }
 
   const currentPayload = await buildBackupPayload(db);
@@ -33,7 +39,10 @@ export async function restoreFullBackup(
   const backupNewest = getNewestTimestamp(backupPayload);
 
   const wouldOverwriteNewerData =
-    !options.force && currentNewest !== null && backupNewest !== null && currentNewest > backupNewest;
+    !options.force &&
+    currentNewest !== null &&
+    backupNewest !== null &&
+    currentNewest > backupNewest;
 
   if (wouldOverwriteNewerData) {
     return {
@@ -70,7 +79,9 @@ export async function restoreFullBackup(
 // stale snapshot from the backup being restored — that would destroy the
 // very trail that recorded this restore's own safety backup. Every other
 // table is restored to the backup's snapshot; audit_event is left alone.
-const RESTORABLE_TABLES = TABLE_ORDER_PARENTS_FIRST.filter((table) => table !== "auditEvent");
+const RESTORABLE_TABLES = TABLE_ORDER_PARENTS_FIRST.filter(
+  (table) => table !== "auditEvent",
+);
 
 async function applyRestore(db: PrismaClient, payload: BackupPayload): Promise<void> {
   await db.$transaction(async (tx) => {
@@ -78,7 +89,10 @@ async function applyRestore(db: PrismaClient, payload: BackupPayload): Promise<v
       await deleteAllRows(tx as PrismaClient, table);
     }
     for (const table of RESTORABLE_TABLES) {
-      const rows = payload.tables[table];
+      // A backup taken before a new table existed (e.g. `emiLabelLink`)
+      // simply has no key for it — treated as empty, never an error, so
+      // older backups keep restoring cleanly.
+      const rows = payload.tables[table] ?? [];
       if (rows.length === 0) continue;
       await insertRows(tx as PrismaClient, table, rows);
     }
@@ -98,7 +112,9 @@ async function insertRows(
   table: keyof BackupPayload["tables"],
   rows: unknown[],
 ): Promise<void> {
-  const model = tx[table] as unknown as { createMany: (args: { data: unknown[] }) => Promise<unknown> };
+  const model = tx[table] as unknown as {
+    createMany: (args: { data: unknown[] }) => Promise<unknown>;
+  };
   await model.createMany({ data: rows.map(reviveDates) });
 }
 

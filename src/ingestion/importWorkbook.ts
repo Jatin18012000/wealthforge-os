@@ -285,7 +285,7 @@ async function createPlanRecord(
   sourceDocumentId: string,
   sheetSnapshotId: string,
 ) {
-  return tx.planRecord.create({
+  const record = await tx.planRecord.create({
     data: {
       periodMonth: row.periodMonth,
       category: row.category,
@@ -295,8 +295,52 @@ async function createPlanRecord(
       trustState: row.trustState,
       sourceDocumentId,
       sheetSnapshotId,
+      emiEndDate: row.emiEndDate ?? null,
     },
   });
+
+  if (row.category === "emi" && row.amountMinorUnits !== null) {
+    await recordLinkedEmiPayment(tx, row, sourceDocumentId);
+  }
+
+  return record;
+}
+
+/**
+ * When this EMI label has already been linked to a Liability (via the
+ * Liabilities screen — an import never creates this link itself, see
+ * `EmiLabelLink` in prisma/schema.prisma), auto-records the same
+ * `emi_payment` Activity a manual entry would create. A closed liability is
+ * left alone — its debt is done, a re-imported budget line is not evidence
+ * it reopened.
+ */
+async function recordLinkedEmiPayment(
+  tx: Prisma.TransactionClient,
+  row: ExtractedRow,
+  sourceDocumentId: string,
+): Promise<void> {
+  const link = await tx.emiLabelLink.findUnique({
+    where: { labelNormalized: row.labelNormalized },
+    include: { liability: true },
+  });
+  if (link === null || link.liability.closedAt !== null) return;
+
+  await tx.activity.create({
+    data: {
+      kind: "emi_payment",
+      liabilityId: link.liabilityId,
+      amountMinorUnits: row.amountMinorUnits as number,
+      occurredOn: periodMonthToDate(row.periodMonth),
+      sourceDocumentId,
+      trustState: row.trustState,
+    },
+  });
+}
+
+/** The first day of a "YYYY-MM" period, UTC — matches how periods are dated elsewhere in ingestion. */
+function periodMonthToDate(periodMonth: string): Date {
+  const [yearPart, monthPart] = periodMonth.split("-");
+  return new Date(Date.UTC(Number(yearPart), Number(monthPart) - 1, 1));
 }
 
 interface BuildAuditArgs {

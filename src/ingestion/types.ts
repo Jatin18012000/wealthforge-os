@@ -7,20 +7,11 @@
 
 /** Trust states from docs/08_DATA_TRUST_MODEL.md. */
 export type TrustState =
-  | "extracted"
-  | "needs_review"
-  | "validated"
-  | "verified"
-  | "rejected"
-  | "superseded";
+  "extracted" | "needs_review" | "validated" | "verified" | "rejected" | "superseded";
 
 /** Sheet classification against stored history (docs/09_INGESTION_ARCHITECTURE.md). */
 export type SheetClassification =
-  | "new"
-  | "modified"
-  | "unchanged"
-  | "deleted_renamed"
-  | "conflict";
+  "new" | "modified" | "unchanged" | "deleted_renamed" | "conflict";
 
 export type SheetKind = "month" | "reference" | "unrecognized";
 
@@ -93,6 +84,12 @@ export interface ExtractedRow {
   /** Provenance: worksheet row number and the amount cell's A1 reference. */
   rowNumber: number;
   amountCellRef: string;
+  /**
+   * The EMI end date the source stated for this row, when it has one.
+   * Only ever set for `category: "emi"` rows from a layout that carries an
+   * EMI end date column — never inferred for any other row.
+   */
+  emiEndDate?: Date | null;
 }
 
 export interface ExtractedSheet {

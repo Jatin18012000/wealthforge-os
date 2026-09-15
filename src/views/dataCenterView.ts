@@ -72,6 +72,64 @@ function summarize(row: AuditEventRow): string {
   }
 }
 
+/**
+ * One budget-EMI label imported at least once (category "emi") that has no
+ * `EmiLabelLink` to a Liability yet. Aggregated across every import of that
+ * label so far — never a single row — because the same EMI recurs every
+ * month it was budgeted.
+ */
+export interface UnlinkedEmiLabel {
+  readonly labelNormalized: string;
+  readonly labelRaw: string;
+  /** The most recently imported month's amount for this label, in minor units. Null if that row's amount was unparseable. */
+  readonly latestAmountMinorUnits: number | null;
+  /** The most recent non-null EMI end date seen for this label, across every import. */
+  readonly latestEmiEndDate: Date | null;
+  /** How many distinct plan records (months) carry this label. */
+  readonly occurrences: number;
+}
+
+async function loadUnlinkedEmiLabels(
+  db: PrismaClient,
+): Promise<readonly UnlinkedEmiLabel[]> {
+  const [emiRecords, links] = await Promise.all([
+    db.planRecord.findMany({
+      where: { category: "emi", supersededById: null },
+      orderBy: [{ periodMonth: "desc" }, { createdAt: "desc" }],
+    }),
+    db.emiLabelLink.findMany({ select: { labelNormalized: true } }),
+  ]);
+
+  const linked = new Set(links.map((link) => link.labelNormalized));
+
+  const byLabel = new Map<string, UnlinkedEmiLabel>();
+  for (const record of emiRecords) {
+    if (linked.has(record.labelNormalized)) continue;
+
+    const existing = byLabel.get(record.labelNormalized);
+    if (existing === undefined) {
+      byLabel.set(record.labelNormalized, {
+        labelNormalized: record.labelNormalized,
+        labelRaw: record.labelRaw,
+        latestAmountMinorUnits: record.amountMinorUnits,
+        latestEmiEndDate: record.emiEndDate,
+        occurrences: 1,
+      });
+      continue;
+    }
+
+    byLabel.set(record.labelNormalized, {
+      ...existing,
+      // Rows are visited in periodMonth-desc order, so the first non-null
+      // end date seen for a label is its most recent one.
+      latestEmiEndDate: existing.latestEmiEndDate ?? record.emiEndDate,
+      occurrences: existing.occurrences + 1,
+    });
+  }
+
+  return [...byLabel.values()].sort((a, b) => a.labelRaw.localeCompare(b.labelRaw));
+}
+
 export interface DataCenterView {
   readonly auditLog: readonly DecodedAuditEvent[];
   readonly sourceDocuments: readonly SourceDocumentRow[];
@@ -80,20 +138,29 @@ export interface DataCenterView {
   readonly backups: readonly BackupFile[];
   /** The audit_event the caller just produced, decoded, if one was requested. */
   readonly justPerformed: DecodedAuditEvent | null;
+  /** Budget-imported EMI labels with no Liability linked yet. */
+  readonly unlinkedEmiLabels: readonly UnlinkedEmiLabel[];
 }
 
 export async function getDataCenterView(
   db: PrismaClient,
   options: { highlightEventId?: string } = {},
 ): Promise<DataCenterView> {
-  const [auditLog, sourceDocuments, revisions, trustSummaries, backups] =
-    await Promise.all([
-      listAuditEvents(db),
-      listSourceDocuments(db),
-      listRevisions(db),
-      trustStateSummary(db),
-      listBackupFiles(BACKUP_DIR),
-    ]);
+  const [
+    auditLog,
+    sourceDocuments,
+    revisions,
+    trustSummaries,
+    backups,
+    unlinkedEmiLabels,
+  ] = await Promise.all([
+    listAuditEvents(db),
+    listSourceDocuments(db),
+    listRevisions(db),
+    trustStateSummary(db),
+    listBackupFiles(BACKUP_DIR),
+    loadUnlinkedEmiLabels(db),
+  ]);
 
   const decoded = auditLog.map(decodeAuditEvent);
   const justPerformed =
@@ -108,5 +175,6 @@ export async function getDataCenterView(
     trustSummaries,
     backups,
     justPerformed,
+    unlinkedEmiLabels,
   };
 }

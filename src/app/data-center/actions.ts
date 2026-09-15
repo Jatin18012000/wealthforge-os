@@ -195,7 +195,13 @@ export async function restoreBackupAction(form: FormData): Promise<void> {
 // permitted only when the record has no payment/contribution history yet,
 // so real financial history is never silently discarded.
 
-const GOAL_KINDS = ["emergency_fund", "car", "marriage", "third_floor", "custom"] as const;
+const GOAL_KINDS = [
+  "emergency_fund",
+  "car",
+  "marriage",
+  "third_floor",
+  "custom",
+] as const;
 const LIABILITY_KINDS = ["home_loan", "other"] as const;
 const INSURANCE_KINDS = ["health_personal", "health_family", "term", "other"] as const;
 const PREMIUM_FREQUENCIES = ["monthly", "quarterly", "annual"] as const;
@@ -232,11 +238,16 @@ export async function createGoalAction(form: FormData): Promise<void> {
   if (kind === "emergency_fund") {
     const existing = await db.goal.findFirst({ where: { kind: "emergency_fund" } });
     if (existing !== null) {
-      fail("An Emergency Fund goal already exists — top it up from the Goals screen instead of creating another.");
+      fail(
+        "An Emergency Fund goal already exists — top it up from the Goals screen instead of creating another.",
+      );
     }
   }
 
-  const targetAmountMinorUnits = requiredMinorUnits(text(form, "targetAmount"), "Target amount");
+  const targetAmountMinorUnits = requiredMinorUnits(
+    text(form, "targetAmount"),
+    "Target amount",
+  );
   if (targetAmountMinorUnits <= 0) fail("Target amount must be greater than zero.");
 
   const targetDate = parseOptionalDate(text(form, "targetDate"));
@@ -298,19 +309,27 @@ export async function createLiabilityAction(form: FormData): Promise<void> {
     fail(`"${kind}" is not a recognized liability type.`);
   }
 
-  const totalPriceMinorUnits = requiredMinorUnits(text(form, "totalPrice"), "Total price");
+  const totalPriceMinorUnits = requiredMinorUnits(
+    text(form, "totalPrice"),
+    "Total price",
+  );
   if (totalPriceMinorUnits <= 0) fail("Total price must be greater than zero.");
 
-  const amountPaidUpfrontMinorUnits = optionalMinorUnits(text(form, "amountPaidUpfront"), "Amount paid upfront") ?? 0;
+  const amountPaidUpfrontMinorUnits =
+    optionalMinorUnits(text(form, "amountPaidUpfront"), "Amount paid upfront") ?? 0;
   if (amountPaidUpfrontMinorUnits < 0) fail("Amount paid upfront cannot be negative.");
   if (amountPaidUpfrontMinorUnits >= totalPriceMinorUnits) {
-    fail("Amount paid upfront must be less than the total price — otherwise there is nothing to finance as an EMI.");
+    fail(
+      "Amount paid upfront must be less than the total price — otherwise there is nothing to finance as an EMI.",
+    );
   }
 
   const startDate = parseOptionalDate(text(form, "startDate"));
   const endDate = parseOptionalDate(text(form, "endDate"));
-  if (startDate === null || endDate === null) fail("Both a start date and an end date are required.");
-  if (endDate.getTime() <= startDate.getTime()) fail("The end date must be after the start date.");
+  if (startDate === null || endDate === null)
+    fail("Both a start date and an end date are required.");
+  if (endDate.getTime() <= startDate.getTime())
+    fail("The end date must be after the start date.");
 
   const interestRateRaw = text(form, "annualInterestRate");
   let interestRateBps = 0;
@@ -323,9 +342,13 @@ export async function createLiabilityAction(form: FormData): Promise<void> {
 
   const principalMinorUnits = totalPriceMinorUnits - amountPaidUpfrontMinorUnits;
   const tenureMonths = computeTenureMonthsBetween(startDate, endDate);
-  const emiAmountMinorUnits = computeEmiAmount(principalMinorUnits, interestRateBps, tenureMonths);
+  const emiAmountMinorUnits = computeEmiAmount(
+    principalMinorUnits,
+    interestRateBps,
+    tenureMonths,
+  );
 
-  await db.liability.create({
+  const liability = await db.liability.create({
     data: {
       name,
       kind,
@@ -338,11 +361,92 @@ export async function createLiabilityAction(form: FormData): Promise<void> {
     },
   });
 
+  // Set only when this liability was registered from a detected budget-EMI
+  // label (see "Unlinked EMIs" on this screen) — links the label to the new
+  // liability and backfills every month already imported under it, so past
+  // payments count immediately rather than only future re-imports.
+  const linkLabelNormalized = text(form, "linkEmiLabelNormalized").trim();
+  if (linkLabelNormalized !== "") {
+    await linkEmiLabelToLiability(linkLabelNormalized, liability.id);
+  }
+
   revalidatePath("/liabilities");
+  revalidatePath("/data-center");
   revalidatePath("/");
   redirect(
     dataCenterUrl({
       recordCreated: `Liability "${name}" — ${(emiAmountMinorUnits / 100).toFixed(2)}/month for ${tenureMonths} months`,
+    }),
+  );
+}
+
+/** The first day of a "YYYY-MM" period, UTC — same convention as ingestion's own periodMonthToDate. */
+function periodMonthToDate(periodMonth: string): Date {
+  const [yearPart, monthPart] = periodMonth.split("-");
+  return new Date(Date.UTC(Number(yearPart), Number(monthPart) - 1, 1));
+}
+
+/**
+ * Links a normalized budget-EMI label to a liability and backfills an
+ * `emi_payment` Activity for every currently-effective "emi" plan record
+ * already imported under that label — the same records a future re-import
+ * of that label would now auto-record against this liability.
+ */
+async function linkEmiLabelToLiability(
+  labelNormalized: string,
+  liabilityId: string,
+): Promise<void> {
+  await db.emiLabelLink.upsert({
+    where: { labelNormalized },
+    create: { labelNormalized, liabilityId },
+    update: { liabilityId },
+  });
+
+  const pastRecords = await db.planRecord.findMany({
+    where: {
+      category: "emi",
+      labelNormalized,
+      supersededById: null,
+      amountMinorUnits: { not: null },
+    },
+  });
+
+  if (pastRecords.length === 0) return;
+
+  await db.activity.createMany({
+    data: pastRecords.map((record) => ({
+      kind: "emi_payment",
+      liabilityId,
+      amountMinorUnits: record.amountMinorUnits as number,
+      occurredOn: periodMonthToDate(record.periodMonth),
+      sourceDocumentId: record.sourceDocumentId,
+      trustState: record.trustState,
+    })),
+  });
+}
+
+export async function linkEmiLabelAction(form: FormData): Promise<void> {
+  const labelNormalized = text(form, "labelNormalized").trim();
+  if (labelNormalized === "") fail("No EMI label given to link.");
+
+  const liabilityId = text(form, "liabilityId");
+  const liability = await db.liability.findUnique({ where: { id: liabilityId } });
+  if (liability === null) fail("That liability no longer exists.");
+  if (liability.closedAt !== null) {
+    fail(`"${liability.name}" is closed and cannot accept a new linked EMI label.`);
+  }
+
+  const existingLink = await db.emiLabelLink.findUnique({ where: { labelNormalized } });
+  if (existingLink !== null) fail("That EMI label is already linked to a liability.");
+
+  await linkEmiLabelToLiability(labelNormalized, liabilityId);
+
+  revalidatePath("/liabilities");
+  revalidatePath("/data-center");
+  revalidatePath("/");
+  redirect(
+    dataCenterUrl({
+      recordCreated: `Linked EMI label to "${liability.name}" — past imported months were recorded as payments.`,
     }),
   );
 }
@@ -352,7 +456,10 @@ export async function closeLiabilityAction(form: FormData): Promise<void> {
   const liability = await db.liability.findUnique({ where: { id: liabilityId } });
   if (liability === null) fail("That liability no longer exists.");
 
-  await db.liability.update({ where: { id: liabilityId }, data: { closedAt: new Date() } });
+  await db.liability.update({
+    where: { id: liabilityId },
+    data: { closedAt: new Date() },
+  });
   revalidatePath("/liabilities");
   revalidatePath("/");
   redirect(dataCenterUrl({ recordClosed: liability.name }));
@@ -389,7 +496,10 @@ export async function createInsurancePolicyAction(form: FormData): Promise<void>
   const provider = text(form, "provider").trim();
   if (provider === "") fail("Name the insurance provider.");
 
-  const coverAmountMinorUnits = optionalMinorUnits(text(form, "coverAmount"), "Cover amount");
+  const coverAmountMinorUnits = optionalMinorUnits(
+    text(form, "coverAmount"),
+    "Cover amount",
+  );
   const premiumMinorUnits = optionalMinorUnits(text(form, "premium"), "Premium");
 
   const premiumFrequencyRaw = text(form, "premiumFrequency");
@@ -426,7 +536,10 @@ export async function closeInsurancePolicyAction(form: FormData): Promise<void> 
   const policy = await db.insurancePolicy.findUnique({ where: { id: policyId } });
   if (policy === null) fail("That policy no longer exists.");
 
-  await db.insurancePolicy.update({ where: { id: policyId }, data: { status: "cancelled" } });
+  await db.insurancePolicy.update({
+    where: { id: policyId },
+    data: { status: "cancelled" },
+  });
   revalidatePath("/insurance");
   revalidatePath("/");
   redirect(dataCenterUrl({ recordClosed: `${policy.provider} policy` }));

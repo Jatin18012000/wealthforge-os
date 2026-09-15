@@ -45,7 +45,8 @@ conflict), raw_data_json, imported_at`
 `id, period_month, category (income | expense | investment | emi), label_raw,
 label_normalized, amount_minor_units, currency, source_document_id,
 sheet_snapshot_id, trust_state, superseded_by_id (nullable, self-reference),
-created_at`
+created_at, emi_end_date (nullable — the EMI end date a source workbook
+stated for this row; only ever populated for category "emi", D-020)`
 
 **position_snapshot**
 `id, instrument_id, as_of_date, quantity, unit, source_document_id,
@@ -74,6 +75,13 @@ emi_amount_minor_units, created_at`
 
 **liability_payer_split**
 `id, liability_id, payer_name, share_bps, effective_from`
+
+**emi_label_link**
+`id, label_normalized (unique), liability_id, created_at` — links one
+normalized budget-EMI label to the liability it represents, so every future
+import of that label auto-records an `emi_payment` activity against the
+right liability. Created only by explicit user action, never guessed by an
+import (D-020).
 
 **goal**
 `id, name, kind (emergency_fund | car | marriage | third_floor | custom),

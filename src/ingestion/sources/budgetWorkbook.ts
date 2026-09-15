@@ -1,6 +1,14 @@
-import { parseAmountToMinorUnits } from "../normalize";
+import { isParseableDate, parseAmountToMinorUnits } from "../normalize";
 import { matchMonthSheet } from "../sheetClassifier";
-import type { ExtractedRow, ExtractedSheet, PlanCategory, RawCell, RawGridRow, RawSheet, TrustState } from "../types";
+import type {
+  ExtractedRow,
+  ExtractedSheet,
+  PlanCategory,
+  RawCell,
+  RawGridRow,
+  RawSheet,
+  TrustState,
+} from "../types";
 import {
   BUDGET_ATTRIBUTE_COLUMNS,
   BUDGET_SECTION_LABELS,
@@ -45,10 +53,24 @@ function cellText(cell: RawCell | undefined): string {
   return String(cell.value).trim();
 }
 
-function findColumnByLabels(
-  row: RawGridRow,
-  labels: readonly string[],
-): number | null {
+/**
+ * Reads an EMI end date cell to a real `Date`, or `null` when the cell is
+ * blank or does not parse to a calendar date. A cell that fails to parse is
+ * treated the same as blank here — the caller still records the row as
+ * having *an* EMI end date cell (so category resolution still works) but
+ * the date itself is never guessed at.
+ */
+function parseEmiEndDateCell(cell: RawCell | undefined): Date | null {
+  if (cell === undefined || cell.value === null) return null;
+  if (cell.value instanceof Date) {
+    return Number.isNaN(cell.value.getTime()) ? null : cell.value;
+  }
+  if (!isParseableDate(cell.value)) return null;
+  const parsed = new Date(cell.value as string | number);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function findColumnByLabels(row: RawGridRow, labels: readonly string[]): number | null {
   for (const [colNumber, cell] of row.cells) {
     if (labels.includes(normalizeText(cellText(cell)))) return colNumber;
   }
@@ -150,15 +172,34 @@ function extractBlock(
       );
     }
 
+    // The EMI end date column is shared across the whole sheet row, but an
+    // income/investment row can sit on the same row number as an unrelated
+    // expense row's EMI end date — that date describes the expense row, not
+    // this one, so it is only ever attached once the category resolves to
+    // "emi" below.
     const emiEndDateCell =
-      layout.emiEndDateColumn === null ? undefined : gridRow.cells.get(layout.emiEndDateColumn);
+      layout.emiEndDateColumn === null
+        ? undefined
+        : gridRow.cells.get(layout.emiEndDateColumn);
     const hasEmiEndDate = cellText(emiEndDateCell) !== "";
+    const category = resolveCategory(labelRaw, hasEmiEndDate);
 
-    const trustState: TrustState = validationIssues.length === 0 ? "validated" : "needs_review";
+    let emiEndDate: Date | null = null;
+    if (category === "emi") {
+      emiEndDate = parseEmiEndDateCell(emiEndDateCell);
+      if (hasEmiEndDate && emiEndDate === null) {
+        validationIssues.push(
+          `EMI end date "${cellText(emiEndDateCell)}" could not be parsed as a date`,
+        );
+      }
+    }
+
+    const trustState: TrustState =
+      validationIssues.length === 0 ? "validated" : "needs_review";
 
     rows.push({
       periodMonth,
-      category: resolveCategory(labelRaw, hasEmiEndDate),
+      category,
       labelRaw,
       labelNormalized: normalizeText(labelRaw),
       amountMinorUnits: minorUnits,
@@ -166,6 +207,7 @@ function extractBlock(
       validationIssues,
       rowNumber: gridRow.rowNumber,
       amountCellRef: amountCell.ref,
+      emiEndDate,
     });
   }
 
@@ -213,7 +255,8 @@ export function extractBudgetSheet(
     // EMIs live inside the Expenses column in this workbook, so category is
     // resolved by label or by the presence of an EMI end date — the latter
     // catches genuine EMIs whose label says nothing about it (R-01).
-    (label, hasEmiEndDate) => (looksLikeEmiLabel(label) || hasEmiEndDate ? "emi" : "expense"),
+    (label, hasEmiEndDate) =>
+      looksLikeEmiLabel(label) || hasEmiEndDate ? "emi" : "expense",
     layout.headerRowNumber,
     blockEnd,
   );

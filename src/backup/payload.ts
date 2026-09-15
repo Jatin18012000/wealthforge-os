@@ -14,6 +14,7 @@ export async function buildBackupPayload(db: PrismaClient): Promise<BackupPayloa
       valuation: await db.valuation.findMany(),
       liability: await db.liability.findMany(),
       liabilityPayerSplit: await db.liabilityPayerSplit.findMany(),
+      emiLabelLink: await db.emiLabelLink.findMany(),
       goal: await db.goal.findMany(),
       activity: await db.activity.findMany(),
       insurancePolicy: await db.insurancePolicy.findMany(),
@@ -27,7 +28,10 @@ export async function buildBackupPayload(db: PrismaClient): Promise<BackupPayloa
 
 export function countRows(payload: BackupPayload): Record<string, number> {
   return Object.fromEntries(
-    Object.entries(payload.tables).map(([table, rows]) => [table, (rows as unknown[]).length]),
+    Object.entries(payload.tables).map(([table, rows]) => [
+      table,
+      (rows as unknown[]).length,
+    ]),
   );
 }
 

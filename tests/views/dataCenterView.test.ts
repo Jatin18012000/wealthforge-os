@@ -192,4 +192,102 @@ describe("Data Center view", () => {
     const files = await listBackupFiles(path.join(backupDir, "does-not-exist"));
     expect(files).toEqual([]);
   });
+
+  it("surfaces an imported EMI label with no Liability link yet", async () => {
+    const endDate = new Date("2027-06-01");
+    await db.planRecord.create({
+      data: {
+        periodMonth: "2026-07",
+        category: "emi",
+        labelRaw: "Fridge EMI",
+        labelNormalized: "fridge emi",
+        amountMinorUnits: 250_000,
+        emiEndDate: endDate,
+      },
+    });
+    await db.planRecord.create({
+      data: {
+        periodMonth: "2026-08",
+        category: "emi",
+        labelRaw: "Fridge EMI",
+        labelNormalized: "fridge emi",
+        amountMinorUnits: 250_000,
+        emiEndDate: endDate,
+      },
+    });
+
+    const view = await getDataCenterView(db);
+    const found = view.unlinkedEmiLabels.find(
+      (row) => row.labelNormalized === "fridge emi",
+    );
+
+    expect(found?.labelRaw).toBe("Fridge EMI");
+    expect(found?.latestAmountMinorUnits).toBe(250_000);
+    expect(found?.latestEmiEndDate?.getTime()).toBe(endDate.getTime());
+    expect(found?.occurrences).toBe(2);
+  });
+
+  it("excludes an EMI label once it has been linked to a liability", async () => {
+    await db.planRecord.create({
+      data: {
+        periodMonth: "2026-08",
+        category: "emi",
+        labelRaw: "Linked EMI",
+        labelNormalized: "linked emi",
+        amountMinorUnits: 100_000,
+      },
+    });
+    const liability = await db.liability.create({
+      data: {
+        name: "Linked loan",
+        kind: "other",
+        principalMinorUnits: 100_000,
+        outstandingMinorUnits: 100_000,
+        outstandingAsOf: new Date("2026-01-01"),
+        interestRateBps: 0,
+        tenureMonths: 1,
+        emiAmountMinorUnits: 100_000,
+      },
+    });
+    await db.emiLabelLink.create({
+      data: { labelNormalized: "linked emi", liabilityId: liability.id },
+    });
+
+    const view = await getDataCenterView(db);
+    expect(
+      view.unlinkedEmiLabels.some((row) => row.labelNormalized === "linked emi"),
+    ).toBe(false);
+  });
+
+  it("ignores a superseded EMI plan record when listing unlinked labels", async () => {
+    const superseded = await db.planRecord.create({
+      data: {
+        periodMonth: "2026-08",
+        category: "emi",
+        labelRaw: "Superseded EMI",
+        labelNormalized: "superseded emi",
+        amountMinorUnits: 100_000,
+      },
+    });
+    const replacement = await db.planRecord.create({
+      data: {
+        periodMonth: "2026-08",
+        category: "emi",
+        labelRaw: "Superseded EMI",
+        labelNormalized: "superseded emi",
+        amountMinorUnits: 150_000,
+      },
+    });
+    await db.planRecord.update({
+      where: { id: superseded.id },
+      data: { supersededById: replacement.id, trustState: "superseded" },
+    });
+
+    const view = await getDataCenterView(db);
+    const found = view.unlinkedEmiLabels.find(
+      (row) => row.labelNormalized === "superseded emi",
+    );
+    expect(found?.occurrences).toBe(1);
+    expect(found?.latestAmountMinorUnits).toBe(150_000);
+  });
 });

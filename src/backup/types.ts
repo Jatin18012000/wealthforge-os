@@ -15,6 +15,7 @@ export interface BackupPayload {
     valuation: unknown[];
     liability: unknown[];
     liabilityPayerSplit: unknown[];
+    emiLabelLink: unknown[];
     goal: unknown[];
     activity: unknown[];
     insurancePolicy: unknown[];
@@ -41,6 +42,7 @@ export const TABLE_ORDER_PARENTS_FIRST: Array<keyof BackupPayload["tables"]> = [
   "positionSnapshot",
   "valuation",
   "liabilityPayerSplit",
+  "emiLabelLink",
   "activity",
   "insurancePolicy",
   "revision",

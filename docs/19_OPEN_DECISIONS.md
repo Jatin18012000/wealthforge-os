@@ -407,6 +407,45 @@ milestone in its §4 sequence.
 
 D-014 and D-015 above are closed by that same session.
 
+### D-020: EMI-from-workbook link — RESOLVED
+
+Budget imports already detected EMI rows (label pattern or a populated EMI
+end date column) and classified them as `category: "emi"` `PlanRecord`s for
+the Budget screen's Plan vs Reality — but that was a dead end: the EMI end
+date was read only as a yes/no flag and discarded, and nothing connected an
+imported EMI label to a `Liability`, so an imported EMI never appeared in
+the Liabilities screen or net worth's liability side, no matter how many
+months it was budgeted.
+
+**Decision:** rather than have ingestion guess a `Liability`'s principal or
+interest rate — neither of which a budget workbook states — a new
+`EmiLabelLink` table (`prisma/schema.prisma`) links one normalized EMI
+label to a `Liability`, created only by explicit user action:
+
+1. `PlanRecord` gained a nullable `emiEndDate`, so the date ingestion was
+   already reading is actually kept (`src/ingestion/sources/budgetWorkbook.ts`,
+   `src/ingestion/importWorkbook.ts`).
+2. The Data Center screen lists every EMI label imported so far with no
+   link yet ("Unlinked EMIs from your budget imports"), showing its latest
+   amount, end date, and how many months it's been seen. Each row offers
+   either "Create liability from this" — pre-filling the existing manual
+   liability form's name and end date (D-018's form, unchanged) — or
+   linking straight to an existing liability.
+3. Completing either path calls `linkEmiLabelToLiability`
+   (`src/app/data-center/actions.ts`), which creates the `EmiLabelLink` and
+   backfills an `emi_payment` Activity for every month already imported
+   under that label — not just future ones.
+4. From then on, every re-import that carries a linked label
+   auto-records the same `emi_payment` Activity a manual entry would
+   (`recordLinkedEmiPayment`, `src/ingestion/importWorkbook.ts`), skipped
+   automatically for a closed liability.
+
+An import never creates or guesses a link on its own — only a human
+completing the liability form (principal, interest rate) or explicitly
+picking an existing liability creates one. `EmiLabelLink` was also added to
+the full-backup payload (`src/backup/`), with `restore.ts` tolerant of an
+older backup that predates the table.
+
 ## Non-decisions (explicitly out of scope, not "open")
 
 Multi-user support, automatic trade execution, mandatory brokerage

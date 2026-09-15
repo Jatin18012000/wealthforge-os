@@ -67,6 +67,11 @@ model PlanRecord {
   id               String   @id @default(cuid())
   periodMonth      String // ISO "YYYY-MM"
   category         String // income | expense | investment | emi
+  /// The EMI's stated end date, when the source workbook carries one for
+  /// this row (only ever populated for category "emi"). Null for every
+  /// other category, and null for an "emi" row whose sheet had no EMI end
+  /// date column or left the cell blank — never guessed.
+  emiEndDate       DateTime?
   labelRaw         String
   labelNormalized  String
   /// Nullable on purpose: a cell that could not be parsed as an amount
@@ -260,6 +265,7 @@ model Liability {
 
   payerSplits LiabilityPayerSplit[]
   activities  Activity[]
+  emiLabelLinks EmiLabelLink[]
 
   @@map("liability")
 }
@@ -274,6 +280,24 @@ model LiabilityPayerSplit {
 
   @@index([liabilityId])
   @@map("liability_payer_split")
+}
+
+/// Links one normalized budget-EMI label (e.g. "home emi") to the Liability
+/// it represents, so every future import of that label auto-records an
+/// `emi_payment` Activity against the right liability instead of leaving the
+/// budget-side EMI and the liability-side loan as two disconnected records.
+///
+/// Created only by explicit user action (registering a liability from a
+/// detected EMI label, or manually linking one) — an import never creates
+/// this link on its own, and never guesses which liability a label means.
+model EmiLabelLink {
+  id              String   @id @default(cuid())
+  labelNormalized String   @unique
+  liabilityId     String
+  liability       Liability @relation(fields: [liabilityId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+
+  @@map("emi_label_link")
 }
 
 // --- Goals --------------------------------------------------------------

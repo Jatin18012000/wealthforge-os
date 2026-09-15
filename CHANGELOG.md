@@ -4,6 +4,22 @@ All notable changes to WEALTHFORGE OS are recorded here. This project
 does not follow a fixed release cadence; entries are grouped by release
 tag.
 
+## [Unreleased]
+
+### Added
+
+- **EMI-from-workbook link** (D-020): budget-imported EMI rows now keep
+  the EMI end date the source stated instead of discarding it
+  (`plan_record.emi_end_date`), and the Data Center screen lists every
+  imported EMI label not yet linked to a Liability ("Unlinked EMIs from
+  your budget imports"). Linking a label — either by registering a new
+  liability pre-filled with its name/end date, or pointing it at an
+  existing one — backfills an `emi_payment` Activity for every month
+  already imported under that label, and every future re-import
+  auto-records the same payment against it. A budget import never creates
+  the link or guesses a liability's principal/interest rate on its own.
+  New `emi_label_link` table, included in full backup/restore.
+
 ## [1.1.1] — 2026-09-02
 
 Bounded polish release — "Command Center Personalization & Insight
